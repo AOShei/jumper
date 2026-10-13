@@ -57,6 +57,10 @@ NOT_LOCOMOTION = {
     "jumper.dance",
     # The same, each with a clip of its own, imported from rl-wbc-fsm.
     "jumper.dance_brazilian",
+    # The fetch film's two gestures (tools/fetch/make_zoidberg.py, make_sleep.py): clips
+    # of their own, the same 22-joint tracking skeleton as the dances, no gait.
+    "jumper.gesture_zoidberg",
+    "jumper.gesture_sleep",
     "jumper.dance_dream_wings",
     "jumper.dance_maze",
     "jumper.dance_waist",

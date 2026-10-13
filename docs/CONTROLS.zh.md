@@ -1,4 +1,4 @@
-<!-- tracks: CONTROLS.md @ sha256:ecdf6d5595991337 -->
+<!-- tracks: CONTROLS.md @ sha256:16ce1b655a60d1d4 -->
 
 # 操作方式 —— 手柄、键盘，以及由谁决定它们的含义
 
@@ -352,14 +352,15 @@ task:
   arm_thumb_up:   { kind: press,  does: "holds the carried arm straight out, thumb up, while held" }
   arm_thumb_down: { kind: press,  does: "holds the carried arm straight out, thumb down, while held" }
   arm_web_up:     { kind: press,  does: "holds the carried arm straight out, thumb-web up, while held" }
+  arm_to_face:    { kind: press,  does: "holds the carried arm bent in, the claw before the visor, while held" }
 
 devices:
   gamepad:
     task: { claw_left: LT, claw_right: RT, arm_thumb_up: dpad_up,
-            arm_thumb_down: dpad_down, arm_web_up: dpad_left }
+            arm_thumb_down: dpad_down, arm_web_up: dpad_left, arm_to_face: dpad_right }
   keyboard:
     task: { claw_left: [key_space], claw_right: [key_space], arm_thumb_up: [shift],
-            arm_thumb_down: [alt], arm_web_up: [ctrl] }
+            arm_thumb_down: [alt], arm_web_up: [ctrl], arm_to_face: [key_q] }
 ```
 
 `amount` 取 0 到 1，按多深就是多少：在手柄上是一个轴 —— 扳机的行程 —— 在键盘上是一个键的斜坡。`press`
@@ -376,7 +377,7 @@ devices:
 `jumper.five_foot` 的机械臂在它的控制按住期间伸到一个预设位，什么都不按的那一刻就回到收起位 ——
 这是 Control-agent 3.1 的点动开关，2026-09-29 提出；在那之前，十字键方向在松开时才被读取，再按一次才
 收起，这是写 hook 时经由 MuJoCo 的 viewer 的键所能做到的全部。两个同时按住，就是两者之间的姿态；大拇指
-朝上和大拇指朝下同时按住，两者都不算。在爪子模式里 Shift 把机械臂伸出去，而一个为某件事按住的修饰键
+朝上和大拇指朝下同时按住，两者都不算；唯一向内弯的预设 `arm_to_face` 不参与混合 —— 按住，就是这个姿态。在爪子模式里 Shift 把机械臂伸出去，而一个为某件事按住的修饰键
 不能同时修饰另一个键去做另一件事，所以键盘在那里的扭身是 `unbound`，扭身只归手柄。
 
 ### 4.7 哪个设备在驾驶

@@ -155,6 +155,18 @@ enter = "gesture_paw"
 when = "button:gesture_salute"
 enter = "gesture_salute"
 
+# The Zoidberg (tools/fetch/make_zoidberg.py, 2026-10-13): a gesture of this
+# repository's own, on X, reachable from the claw modes too so the fetch's
+# excitement needs no detour through the walk.
+[[fsm.rule]]
+when = "button:gesture_zoidberg"
+enter = "gesture_zoidberg"
+
+# The sleep (tools/fetch/make_sleep.py, 2026-10-13): the same kind of gesture, on Y.
+[[fsm.rule]]
+when = "button:gesture_sleep"
+enter = "gesture_sleep"
+
 # The claw, carried on either side: one jumper.five_foot export, two modes, the
 # side in each one's hook. Below the recordings, and that is not only habit:
 # the pad's Menu + d-pad chords reach a dance from a claw mode, whose own
