@@ -19,7 +19,9 @@ import numpy as np
 from sense import COLS, FLOOR_CLEAR, ROWS, TOF_ORIGIN
 
 RES = 0.05                 # m per cell
-SIZE = 14.0                # m across; the wake pose sits at the centre
+SIZE = 20.0                # m across; the wake pose sits at the centre (14 put the edge 1 m past the
+                           # tray; stalled against a pillar the stick-reckoned pose ran 1.4 m ahead of
+                           # the body and walked off the grid, film72)
 N = int(round(SIZE / RES))
 HIT, MISS = 0.9, 0.25      # log-odds steps per frame
 CLAMP = 6.0
@@ -30,12 +32,16 @@ MAP_NEAR = 0.45            # nor inside this: the carried mug hangs 0.25-0.35 m 
 MAP_SELF = 0.35            # cells within this of the base are freed every step: the body stands there, and
                            # the specks the legs and the swinging mug left round the crab at the tray read
                            # as "0.30 m behind" and stopped the retreat (film58)
-INFLATE = 0.33             # m: half the body plus clearance, for planning and corridors (0.28 -> 0.33 with the
+INFLATE = 0.40             # m: half the body plus clearance, for planning and corridors (0.28 -> 0.33 with the
+                           # pillar's face mapped and its sides unknown, the path passed 27 cm from a pillar's
+                           # centre and the crab wedged on it, carry10; 0.40 since)
                            # walk allowed 17 deg off the path, film42)
 SPEED_FWD = 0.42           # m/s per unit of walk stick (0.5 -> 0.21 measured, CREEP_SPEED)
 SPEED_SIDE = 0.35          # m/s per unit of strafe stick (0.5 -> ~0.17 m/s, the sidestep tests)
 DEAD_BAND = 0.40           # a stick under this moves nothing
 MATCH_WIN, MATCH_STEP = 0.15, 0.05   # the scan match's search, m
+STALL_COLS, STALL_M, STALL_S = 8, 0.01, 1.0   # the stall test: this many columns' nearest objects moved less than
+                                           # STALL_M between frames (0.2 s at 0.2 m/s is 4 cm) for STALL_S
 MATCH_GAIN = 0.5           # how much of the best offset is applied per frame
 
 
@@ -47,6 +53,12 @@ class Mapper:
         self.last_t = None
         self.last_frame_t = None
         self.marks = {}                                      # named world points (the flag, the mug)
+        self.fixed = set()                                   # ...of which these are known, not seen (`prior`)
+        self.soft = {}                                       # mark name -> radius (m) the planner walks through
+        self._cols = None                                    # the last frame's nearest object per column (stall test)
+        self._still_t = None                                 # since when the scan has not changed under a walk stick
+        self.stalled = False                                 # the scan still for STALL_S while walking: no reckoning
+        self._carry = [0.0, 0.0]                             # a fix's shift not yet applied to the grid, m
         self.path = []                                       # the last plan, world xy
 
     # -- frames -------------------------------------------------------------------
@@ -68,14 +80,60 @@ class Mapper:
         return cy * dx + sy * dy, -sy * dx + cy * dy
 
     # -- the step ----------------------------------------------------------------
-    def step(self, senses, t, ly, lx):
+    def prior(self, marks):
+        """The staged scene's known points in the wake frame -- the tray's flag, the mug --
+        placed on the map before the first step, as a robot starts with its dock on the
+        map (Andrew, 2026-10-14: "pre-mark the flag on the cost map like a dock... the
+        tray and the cup marked, and the other obstacles are the unknowns"). A sighting
+        of a marked point then corrects the odometry (`fix`), never the mark."""
+        for name, (x, y) in marks.items():
+            self.marks[name] = (float(x), float(y))
+            self.fixed.add(name)
+
+    def fix(self, name, bx, by, gain=0.5, max_m=1.5):
+        """A landmark fix: the mark `name` seen at (bx, by) in the body frame. The pose
+        moves by `gain` of the discrepancy, and the grid moves with it, so what was
+        mapped from the drifted pose keeps its place against the body. Returns the
+        discrepancy in metres, or None when it is past `max_m` (not this landmark)."""
+        if name not in self.marks:
+            return None
+        sx, sy = self.to_world(np.array([[bx, by]]))
+        dx, dy = self.marks[name][0] - float(sx[0]), self.marks[name][1] - float(sy[0])
+        d = math.hypot(dx, dy)
+        if d > max_m:
+            return None
+        self.x += gain * dx
+        self.y += gain * dy
+        self._carry[0] += gain * dx
+        self._carry[1] += gain * dy
+        # the grid shifts by whole cells; the remainder waits for the next fix
+        sc, sr = int(round(self._carry[0] / RES)), int(round(self._carry[1] / RES))
+        if sc or sr:
+            self.grid = np.roll(self.grid, (sr, sc), axis=(0, 1))
+            if sr > 0:
+                self.grid[:sr, :] = 0.0                      # (the wrapped edge is unknown again)
+            elif sr < 0:
+                self.grid[sr:, :] = 0.0
+            if sc > 0:
+                self.grid[:, :sc] = 0.0
+            elif sc < 0:
+                self.grid[:, sc:] = 0.0
+            self._carry[0] -= sc * RES
+            self._carry[1] -= sr * RES
+            self.path = [(x + sc * RES, y + sr * RES) for x, y in self.path]
+        return d
+
+    def step(self, senses, t, ly, lx, scale=1.0):
         """Once per control step. `ly`/`lx` are the pad's sticks (ly < 0 walks forward,
-        lx > 0 strafes right). Dead-reckons the pose, then on a fresh exposure matches
-        the scan to the map and folds the frame in."""
+        lx > 0 strafes right); `scale` is the mode's speed against the claw mode's
+        (SPEED_FWD was measured there). Dead-reckons the pose, then on a fresh exposure
+        matches the scan to the map and folds the frame in."""
         if self.last_t is not None:
             dt = t - self.last_t
-            v = -SPEED_FWD * ly if abs(ly) >= DEAD_BAND else 0.0
-            vy = -SPEED_SIDE * lx if abs(lx) >= DEAD_BAND else 0.0
+            v = -SPEED_FWD * scale * ly if abs(ly) >= DEAD_BAND else 0.0
+            vy = -SPEED_SIDE * scale * lx if abs(lx) >= DEAD_BAND else 0.0
+            if self.stalled:
+                v = vy = 0.0                                 # (wedged: the stick moves nothing)
             cy, sy = math.cos(self.yaw), math.sin(self.yaw)
             self.x += (cy * v - sy * vy) * dt
             self.y += (sy * v + cy * vy) * dt
@@ -88,9 +146,10 @@ class Mapper:
         rr, cc = np.ogrid[-k:k + 1, -k:k + 1]
         disk = (rr * rr + cc * cc) * RES * RES <= MAP_SELF * MAP_SELF
         rs, cs = slice(max(0, r0 - k), min(N, r0 + k + 1)), slice(max(0, c0 - k), min(N, c0 + k + 1))
-        sub = self.grid[rs, cs]
-        d = disk[k - (r0 - rs.start): k + (rs.stop - r0), k - (c0 - cs.start): k + (cs.stop - c0)]
-        sub[d] = np.minimum(sub[d], FREE - 0.5)
+        if rs.stop > rs.start and cs.stop > cs.start:      # (off the grid: an empty slice and a mask that
+            sub = self.grid[rs, cs]                        # does not match raised IndexError and ended film72)
+            d = disk[k - (r0 - rs.start): k + (rs.stop - r0), k - (c0 - cs.start): k + (cs.stop - c0)]
+            sub[d] = np.minimum(sub[d], FREE - 0.5)
         self.yaw = senses.yaw
         f = senses.last
         if f is None or f["t"] == self.last_frame_t:
@@ -100,6 +159,23 @@ class Mapper:
         pts, h = f["pts"], f["h"]
         valid = (r > 0) & ~f["self"].ravel() & (pts[:, 0] > 0.10) & (r < MAP_RANGE) & (r > MAP_NEAR)
         obj = valid & (h > FLOOR_CLEAR)
+        # The stall test: the stick says walk and the scan does not change. Wedged on a
+        # pillar the stick-reckoned pose ran 0.6 m ahead in 10 s and the approach "arrived"
+        # 0.8 m from the tray (carry10). Judged on the nearest object in each column, with
+        # at least STALL_COLS of them in view: an empty picture says nothing.
+        cols = np.where(obj, pts[:, 0], np.inf).reshape(ROWS, COLS).min(axis=0)
+        walking = abs(ly) >= DEAD_BAND or abs(lx) >= DEAD_BAND
+        if self._cols is not None and walking:
+            both = np.isfinite(cols) & np.isfinite(self._cols)
+            if both.sum() >= STALL_COLS and float(np.median(np.abs(cols[both] - self._cols[both]))) < STALL_M:
+                if self._still_t is None:
+                    self._still_t = t
+            else:
+                self._still_t = None
+        else:
+            self._still_t = None
+        self.stalled = self._still_t is not None and t - self._still_t > STALL_S
+        self._cols = cols
         floor = valid & (h <= FLOOR_CLEAR)
         # the scan match: object points against the map's occupied cells
         if obj.sum() >= 20 and (self.grid > OCC).sum() >= 40:
@@ -165,11 +241,26 @@ class Mapper:
         return self.grid > OCC
 
     def inflated(self):
+        """The occupied cells grown by INFLATE, for planning. Cells within `soft[name]`
+        of a mark are not obstacles: the mug the crab is walking to is a thing to reach,
+        never a thing to go round (Andrew, 2026-10-14: the map "so that it cannot
+        possibly confuse the object for an obstacle")."""
         from scipy import ndimage
+        occ = self.grid > OCC
+        for name, radius in self.soft.items():
+            if name in self.marks:
+                r0, c0 = self.cell(*self.marks[name])
+                k = int(math.ceil(radius / RES))
+                rr, cc = np.ogrid[-k:k + 1, -k:k + 1]
+                d = (rr * rr + cc * cc) * RES * RES <= radius * radius
+                rs, cs = slice(max(0, r0 - k), min(N, r0 + k + 1)), slice(max(0, c0 - k), min(N, c0 + k + 1))
+                if rs.stop > rs.start and cs.stop > cs.start:
+                    sub = occ[rs, cs]
+                    sub[d[k - (r0 - rs.start): k + (rs.stop - r0), k - (c0 - cs.start): k + (cs.stop - c0)]] = False
         k = int(math.ceil(INFLATE / RES))
         yy, xx = np.ogrid[-k:k + 1, -k:k + 1]
         disk = (xx * xx + yy * yy) * RES * RES <= INFLATE * INFLATE
-        return ndimage.binary_dilation(self.grid > OCC, structure=disk)
+        return ndimage.binary_dilation(occ, structure=disk)
 
     def clearance(self, heading_b, length, half_width=0.25):
         """The nearest occupied cell inside a corridor from the base along the body-frame

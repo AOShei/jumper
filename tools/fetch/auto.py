@@ -22,6 +22,7 @@ import os
 import numpy as np
 from fetch import (
     CREEP,
+    _yaw,
     HEADING_BIAS,
     LIFT,
     LIFT_S,
@@ -48,6 +49,19 @@ from tasks.jumper.five_foot.claw import aperture_mm
 SIP = os.environ.get("AUTO_SIP", "0") == "1"
 WANDER = os.environ.get("AUTO_WANDER", "0") == "1"    # start lost: a serpentine walk with look-outs until the mug is sighted
 STOP_AT = os.environ.get("AUTO_STOP", "")             # end the take on entering this state (a segment's last frame)
+START = os.environ.get("AUTO_START", "")              # "carry": the mug set into the jaw by hand at the start and the
+                                                      # delivery straight away -- the room walk, the tray and the placing
+                                                      # tested on their own (Andrew, 2026-10-14: "test just navigating and
+                                                      # placing... not once has it arrived successfully")
+MAP_PRIOR = os.environ.get("AUTO_MAP_PRIOR", "1") == "1"   # the staged scene's known points (the tray's flag, the mug) on the
+                                                      # map before the first step, the pillars and the scenery the unknowns;
+                                                      # a sighting of the flag then corrects the ODOMETRY (mapper.fix), as
+                                                      # a dock does. "0": the flag is found, not known (film36-72)
+LOCO_SCALE = float(os.environ.get("AUTO_LOCO_SCALE", "1.4"))   # the locomotion mode's speed per stick unit against the
+                                                      # claw mode's (the mapper's SPEED_FWD was measured in the claw mode):
+                                                      # at 1.0 the wander's reckoning fell 34-89 cm behind the truth over
+                                                      # 2-3 m (film73/74, truly 3.11 m for 2.53 reckoned); the mug, sighted,
+                                                      # then put the odometry right to 1 cm before the grasp
 WANDER_RANGE = 2.0                                    # the mug counts as sighted inside this range (sense.py's 1.5 m is for the grasp)
 WANDER_SWING = math.radians(22)                     # the serpentine swings this far off the line each way, on the gyro
 WANDER_TURN = 0.54                                  # the turn stick on a leg (0.5-1.0 is the turn band): 0.62 spun 60 deg/s (wander1)
@@ -155,15 +169,37 @@ FLAG_BACK = 0.22                                    # the pole stands this far B
 FLAG_SIDE = -0.12                                   # ...12 cm to the right of the mug's spot (room.py MUG_SPOT_SIDE: the
                                                     # pole stands in the middle of the 60 cm mat, the mug lands left of it)
 FLAG_RANGE = 2.5                                    # the scan reaches this far for the flag (1.6 for the pillars)
+FLAG_LINE_HALF = 1.2                                # the flag stands within this of the room's line (the map's x axis):
+                                                    # the real one marked at y -0.03 (film68), the palm trunks taken for
+                                                    # it at +2.0 and +3.6 (film70); the scenery keeps 2.2 m off the line
+FLAG_GATE_M = 0.6                                   # with the flag KNOWN (MAP_PRIOR) a candidate counts only this close to
+                                                    # where the map expects it: the odometry's error budget. 1.5 let the
+                                                    # pillar 2 m ahead in for the pole 3.1 m ahead and the fix pulled the
+                                                    # pose 0.6 m wrong (carry1); the real pole, seen next, put it right
+FLAG_HOLD_M = 0.35                                  # a candidate whose top is out of the picture counts only this close
+                                                    # to where the flag is already marked: a pillar at 0.47 m (film71)
+                                                    # and a palm trunk at 0.45 m (film70) are thin strips 0.3 m tall
+                                                    # too, and each got the mug set down at its foot
 TRAY_NOSE = 0.6                                     # the nose up for the final approach: the mouth 0.158 m up, the mug's
                                                     # base ~0.10 (probe_hang 2026-10-13: ry +0.6 -> 0.158, 0.0 -> 0.107,
                                                     # -0.4 -> 0.072, -1.0 -> 0.028; R3 + stick did not change the height)
 TRAY_LIFT_NOSE, TRAY_LIFT_AT = 0.0, -1.0            # the mug lifted 2 cm clear of the 3 cm tray for the last stretch (the
                                                     # strafe test held through 8 s at 0.2; 0.6 flung it, beat2w/x)
-TRAY_SET_NOSE = -0.35                               # the mouth down to ~0.078 m: the mug, riding 3-4 cm below the mouth, meets
+TRAY_SET_NOSE = -0.43                               # the mouth down to ~0.078 m: the mug, riding 3-4 cm below the mouth, meets
+                                                    # (-0.35 while the mat collided; drawn only, the mug meets the sand 8 mm
+                                                    # lower, and released from a hang of 8-15 deg a centimetre up it landed
+                                                    # on its base's edge and the retreat's beam tipped it onto its handle,
+                                                    # 25 deg, film67; 0.1 of nose is ~8 mm of mouth height, probe_hang)
                                                     # the 8 mm mat (probe_hang: ry -0.4 -> 0.072, 0.0 -> 0.107); no lift before
                                                     # it (TRAY_LIFT_AT -1): the level carry goes straight to the set-down
-TRAY_STOP_EARLY = 0.08                              # the place triggers this far short: the walk-in coasts about as far (w63)
+TRAY_STAND_BACK = 0.2                               # the room walk's goal stands this far before the placing base position, on
+                                                    # the line (0.5 put it 0.37 m from the film layout's last pillar, inside
+                                                    # the inflation: the planner moved the goal aside and the crab came in
+                                                    # diagonally at +40 deg, film74)
+TRAY_STOP_EARLY = 0.02                              # the place triggers this far short: the walk-in coasts about as far (w63)
+                                                    # (0.08 until film67/68: with the spot 22 cm before the pole the mug landed
+                                                    # 6-8 cm short of it, on the mat's near edge, twice -- the coast the 0.08
+                                                    # allowed for is not there at the 0.45 walk-in)
 TRAY_REACH = 0.22                                   # the MUG's centre this far ahead of the base: the pinch holds the handle at the
                                                     # mouth (0.295) and the cup hangs 0.086 behind it, toward the crab. At 0.29 the
                                                     # mug landed straddling the tray's near edge, 22 deg over, twice (film12/13)
@@ -186,7 +222,7 @@ SET_DOWN_S = 2.0                                    # the nose comes down over t
 DRAG_S = 0.0                                        # the backward drag as it lands levelled a heavy mug hanging 30-45 deg forward;
                                                     # the 75 g mug hangs near level and the drag tipped it back onto its handle (light2/3)
 RELEASE_S = 1.0                                     # seconds the trigger takes to come off, with the mug just clear of the sand
-RELIFT = 0.15                                       # the nose back up this much after the touch-down: ~1.5 cm of hang
+RELIFT = 0.10                                       # the nose back up this much after the touch-down: ~1.5 cm of hang
 RELEASE_TO = 0.0                                    # the trigger eased all the way off before the step back: part-open (0.3) left the
                                                     # finger under the loop's lower bar and the step back dragged the mug over onto
                                                     # its handle (light6/8); let go at once it whips (deliver1), so: slow, and fully
@@ -195,18 +231,30 @@ SET_DOWN_NOSE = 0.9                                 # the nose goes this far dow
                                                     # down levels it on the sand before the finger lets go
 STALE_S = 0.6                                       # a mug estimate older than this is dead-reckoned, not trusted
 SEEN_HOLD_S = 1.5                                   # the final creep keeps the last SEEN bar this long over an assumed one
+# The grasp stages run as they did through w68 (2026-10-14 ~06:00). The "error budget"
+# changes that followed (fine at 0.008, no pulses at depth, a 1.5 s give-up into a
+# recentre cycle, the creep stopped 1.8 cm short, closes refused past the depth) MEASURED
+# WORSE: first-grasp success w33-w68 22 of 30 (73%), w69-w88 10 of 20 (50%), films 36-48
+# 8 of 12 against 52-64 5 of 8. Each was reasoned from one failure and cost more than it
+# saved; the constants keep their new names with the old values, and RECENTRE turns the
+# cycle off (the state stays, for the fine stage's timeout).
+RECENTRE = False
+BODY_REAR = 0.20                                    # the legs reach this far behind the base (the posed model's geoms,
+                                                    # carry2: 0.20 behind, 0.26 ahead, 0.26 each side)
+RETREAT_MAX_M = 0.55                                # the retreat backs no further than this: a metre back (film67/68) put the
+                                                    # ending at the pillar, out of the tray's frame
 RECENTRE_S = 0.7                                    # the recentre backs this long (~5 cm) before aiming and creeping again
 FINE_MAX_S = 8.0                                    # the fine stage gives up strafing after this (w80: 100 s in the dead band)
-FINE_EY = 0.008                                     # the side error `fine` hands to the final creep (was 0.02: the hole in the budget)
+FINE_EY = 0.02                                     # the side error `fine` hands to the final creep (was 0.02: the hole in the budget)
 CLOSE_HOLD_S = 0.3                                  # the close window must hold this long (w51: one frame in it closed on air)
 FINE2_EY = (-0.006, 0.020)                          # the side error the close accepts at depth, where no twist is applied (w34):
                                                     # ey below -0.006 puts the bar > 35 mm right of the mouth and the finger's
                                                     # sweep then SPINS the mug instead of sliding it onto the beam (36-68 deg
                                                     # in w16/w38/w31, 37-40 mm; <= 35 mm pinched in 30 of 30 walk tests);
                                                     # toward the beam it is 14 mm at +0.015 and w14 pinched at 7
-CREEP_STOP = 0.018                                  # the final creep lets go this far short; the coast (1.6-2.9 cm) does the rest
-DEPTH_OVER = 0.015                                  # the close refuses the bar this far past its depth (w81: air at 1 and -11 mm)
-DEPTH_TOL = 0.004                                   # (0.012 until 2026-10-14: film61 closed on a bar 9 mm behind the mouth
+CREEP_STOP = -0.005                                  # the final creep lets go this far short; the coast (1.6-2.9 cm) does the rest
+DEPTH_OVER = 1.0                                  # the close refuses the bar this far past its depth (w81: air at 1 and -11 mm)
+DEPTH_TOL = 0.012                                   # (0.012 until 2026-10-14: film61 closed on a bar 9 mm behind the mouth
                                                     # -- the estimate 9 mm long -- and the lift to 0.5 shook it out in 2 s;
                                                     # the probes' lifts held every bar seated >= 16 mm; with CREEP_STOP the
                                                     # coast lands the creep at ex ~ -0.002, inside this)
@@ -233,6 +281,55 @@ def make_pilot(env, player, log=print):
                                          FEATURE["hold"], FEATURE["gap"])
     robot = env.scene["robot"]
     mug_entity = env.scene["mug"] if TRUTH else None
+    if mapper is not None and MAP_PRIOR:
+        # The wake frame is the spawn: the robot stands at the world's origin facing +x
+        # (constants.py init_state), so the layout's world points are the map's.
+        import mug as _mug
+        prior = {"mug": (_mug.MUG_X, _mug.MUG_Y)}
+        try:
+            import room as _room
+            prior["flag"] = (_room.TRAY_XY[0] + _room.FLAG_BACK, _room.TRAY_XY[1] + _room.FLAG_SIDE)
+        except ImportError:
+            pass
+        mapper.prior(prior)
+        mapper.soft["mug"] = 0.25                 # the mug is reached, not gone round (until it is in the claw)
+        log("\n[auto] the map's prior: " + ", ".join(f"{k} at ({x:+.2f},{y:+.2f})" for k, (x, y) in prior.items()))
+
+    def truth_pose():
+        """The base in the world (= the wake frame), for the odometry's log only."""
+        bp = robot.data.root_link_pos_w[0].cpu().numpy(); bq = robot.data.root_link_quat_w[0].cpu().numpy()
+        return float(bp[0]), float(bp[1]), float(_yaw(bq))
+
+    def seed_mug():
+        """The mug set into the open jaw as probe_pinch.py seats it: the outer bar 31 mm
+        behind the mouth point and 29 mm to its right (the creep's means), squared to the
+        body, standing on the ground. Returns the mouth's height over the bar."""
+        from mug import BODY_HALF_H
+        import torch
+        ent = env.scene["mug"]
+        mouth, closing, inward, fin = senses.body()
+        bp = robot.data.root_link_pos_w[0].cpu().numpy(); bq = robot.data.root_link_quat_w[0].cpu().numpy()
+        yaw = _yaw(bq)
+        bar_w = bp + _quat_rot(bq, mouth + np.array([-0.031, -0.029, 0.0]))
+        c, s_ = math.cos(yaw), math.sin(yaw)
+        centre = bar_w - np.array([c * offset[0] - s_ * offset[1], s_ * offset[0] + c * offset[1], 0.0])
+        pose = torch.tensor([[centre[0], centre[1], BODY_HALF_H, math.cos(yaw / 2), 0.0, 0.0, math.sin(yaw / 2)]],
+                            dtype=torch.float32, device=env.device)
+        ent.write_root_link_pose_to_sim(pose)
+        ent.write_root_link_velocity_to_sim(torch.zeros((1, 6), dtype=torch.float32, device=env.device))
+        mw = bp + _quat_rot(bq, mouth)
+        return float(mw[2] - BODY_HALF_H)
+
+    def footprint():
+        """The body's extent in the base frame from its own posed model (every geom's
+        bound): how far the legs reach behind, ahead and to the sides."""
+        senses._pose_self()
+        m, d = senses.m, senses.d
+        rb = m.geom_rbound
+        xs, ys = d.geom_xpos[:, 0], d.geom_xpos[:, 1]
+        keep = (m.geom_bodyid > 0) & (rb < 0.5)
+        return (float((xs - rb)[keep].min()), float((xs + rb)[keep].max()), float((ys - rb)[keep].min()),
+                float((ys + rb)[keep].max()))
 
     st = {"name": "settle", "since": 0.0, "attempts": 0, "turn": 0, "twist": 0.0, "twist_i": 0.0,
           "after_fine": "creep2", "bump": 0.0, "stall_bar": None, "stall_t": 0.0, "recreeps": 0,
@@ -319,7 +416,7 @@ def make_pilot(env, player, log=print):
         return (est is not None and est["width"] < 0.2 and MUG_HEIGHT[0] < est["height"] < MUG_HEIGHT[1]
                 and est["width"] > 0.03)
 
-    def is_flag(c):
+    def is_flag(c, anchor=None):
         """The flag pole: thin, taller than a pillar (0.6 vs 0.4 m: a pillar half hidden
         behind the carried mug is a thin strip 0.34 m tall, beat2m), and whole -- a pillar
         cut by the picture's side is thin too, and one at -25 deg took turns with the
@@ -328,17 +425,111 @@ def make_pilot(env, player, log=print):
         # pole shows, at 1 m 0.51 (beat2q walked past the tray with the flag "too short").
         need = min(FLAG_HEIGHT, 0.10 + 0.30 * c["range"])
         # (the pole is 0.42 m, the pillars 0.6: anything taller than 0.5 is a pillar's edge)
-        return c["width"] < FLAG_WIDTH and need < c["height"] < 0.50 and not c["edge"]
+        if not (c["width"] < FLAG_WIDTH and need < c["height"] < 0.50 and not c["edge"]):
+            return False
+        span = st.get("mug_span")
+        if span is not None and span[0] < c["bearing"] < span[1]:
+            # Behind the carried mug: a pillar 1.9 m ahead showed beside the mug's silhouette
+            # as a one-column strip 37 cm tall, passed for the pole 2.9 m ahead, and the
+            # odometry was "corrected" a metre forward (carry11). Nothing seen through the
+            # mug's edge is the flag; the real pole behind the mug is simply hidden.
+            return False
+        if c["top"]:
+            # Its top above the picture: the height read is the picture's, and inside
+            # 0.5 m a pillar (film71) or a palm trunk (film70) is a thin strip 0.3 m tall
+            # too -- the near cut at NAV_NEAR slices the strip off their faces, so the
+            # width and side-edge tests let them through. With the nose level the pole's
+            # own top (0.42 m, the sensor at 0.14) is in the picture beyond 0.73 m, so a
+            # cut candidate is the flag only where the flag is already marked.
+            return anchor is not None and np.hypot(c["x"] - anchor[0], c["y"] - anchor[1]) < FLAG_HOLD_M
+        if mapper is not None and "flag" in mapper.fixed:
+            # The flag known: a candidate is it only within the odometry's error budget of
+            # where the map puts it (the line band below, relative to the mark, included).
+            return anchor is not None and np.hypot(c["x"] - anchor[0], c["y"] - anchor[1]) < FLAG_GATE_M
+        if mapper is not None:
+            # The tray stands on the room's line; the beach's palms and rocks do not. The
+            # first sighting of film70 was a leaning trunk 2.5 m off to the left, and the
+            # crab carried the mug 4 m up the beach to set it down at its foot.
+            _, wy = mapper.to_world(np.array([[c["x"], c["y"]]]))
+            if abs(float(wy[0])) > FLAG_LINE_HALF:
+                return False
+        return True
 
-    def pick_flag(cands, t):
-        """The candidate nearest where the flag was last seen; none while the one seen
-        lately is simply hidden (the carried mug hid it for a second at a time and a
-        pillar 0.8 m further took its place, beat2k); the nearest when there is no recent one."""
+    def flag_truth(f=None):
+        """For the log: the real pole in the body frame (and the candidate's shape)."""
+        if not TRUTH or mapper is None or "flag" not in mapper.fixed:
+            return ""
+        tx, ty, tyaw = truth_pose()
+        fx, fy = mapper.marks["flag"]
+        c, s_ = math.cos(tyaw), math.sin(tyaw)
+        bx, by = c * (fx - tx) + s_ * (fy - ty), -s_ * (fx - tx) + c * (fy - ty)
+        out = f" (truly {math.hypot(bx, by):.2f} m at {math.degrees(math.atan2(by, bx)):+.0f})"
+        if f is not None:
+            out += f" [w {f['width'] * 100:.0f} h {f['height'] * 100:.0f} cm{' top-cut' if f.get('top') else ''}{' edge' if f.get('edge') else ''}]"
+        return out
+
+    def stop_truth(mouth):
+        """For the log: at the stop, the mouth against the mug's spot and the base against
+        the pole, in the world."""
+        if not TRUTH:
+            return ""
+        try:
+            import room as _room
+        except ImportError:
+            return ""
+        bp = robot.data.root_link_pos_w[0].cpu().numpy(); bq = robot.data.root_link_quat_w[0].cpu().numpy()
+        mw = bp + _quat_rot(bq, mouth)
+        px, py = _room.TRAY_XY[0] + _room.FLAG_BACK, _room.TRAY_XY[1] + _room.FLAG_SIDE
+        sx, sy = px - _room.MUG_SPOT_BACK, py + _room.MUG_SPOT_SIDE
+        return (f"; truly the pole {px - bp[0]:+.2f} ahead, {py - bp[1]:+.2f} left of the base; "
+                f"the mouth {(mw[0] - sx) * 100:+.0f} cm along, {(mw[1] - sy) * 100:+.0f} cm left of the spot")
+
+    def flag_seen(f, t):
+        """A sighting on the map: with the flag known it corrects the odometry (the pose
+        and the grid move, the mark stays); otherwise it is the mark."""
+        if mapper is None:
+            return
+        # The pole's x is the cluster's NEAREST point (plus its radius), not the median:
+        # the pennant stands 9-18 cm behind the pole and at 2 m the median read 17 cm long
+        # (carry2: 2.43 m sensed, 2.26 true; 2.14 vs 1.97; exact inside 1.6 m)
+        if "near" in f:
+            f = dict(f, x=float(f["near"]) + 0.012)
+            f["range"] = float(np.hypot(f["x"], f["y"]))
+        if "flag" in mapper.fixed:
+            if f.get("top"):
+                return                                       # (a cut strip: held by the mark, not trusted to move it)
+            d = mapper.fix("flag", f["x"], f["y"], max_m=FLAG_GATE_M)
+            if d is not None and t - st.get("fix_log_t", -9.0) >= 2.0:
+                st["fix_log_t"] = t
+                log(f"\n[auto] the flag seen {f['range']:.2f} m at {math.degrees(f['bearing']):+.0f}{flag_truth(f)}: "
+                    f"the odometry was {d * 100:.0f} cm off, corrected half-way")
+        else:
+            mapper.mark("flag", f["x"], f["y"])
+
+    def flag_anchor(t):
+        """Where the flag is expected now, in the body frame: the map's mark (turned and
+        moved with the pose), else the last sighting while it is fresh, else None."""
+        if mapper is not None and "flag" in mapper.marks:
+            return mapper.mark_body("flag")
         prev = st.get("flag")
-        if prev is not None:
-            near = [c for c in cands if np.hypot(c["x"] - prev["x"], c["y"] - prev["y"]) < 0.35]
+        if prev is not None and t - st.get("flag_t", -9.0) < 3.0:
+            return (prev["x"], prev["y"])
+        return None
+
+    def pick_flag(cands, t, anchor=None):
+        """The candidate nearest where the flag is expected (the map's mark, else where it
+        was last seen); none while the one seen lately is simply hidden (the carried mug
+        hid it for a second at a time and a pillar 0.8 m further took its place, beat2k);
+        the nearest when there is no recent one. The body-frame memory alone slid back as
+        the crab walked and never turned: after a turn pulse a trunk 0.35 m from the
+        slid point took the flag's place and the mark walked 1.6 m up the beach (film70)."""
+        prev = st.get("flag")
+        if anchor is None and prev is not None:
+            anchor = (prev["x"], prev["y"])
+        if anchor is not None:
+            near = [c for c in cands if np.hypot(c["x"] - anchor[0], c["y"] - anchor[1]) < 0.35]
             if near:
-                return min(near, key=lambda c: np.hypot(c["x"] - prev["x"], c["y"] - prev["y"]))
+                return min(near, key=lambda c: np.hypot(c["x"] - anchor[0], c["y"] - anchor[1]))
             if t - st.get("flag_t", -9.0) < 3.0:
                 return None
         return min(cands, key=lambda c: c["range"]) if cands else None
@@ -406,6 +597,24 @@ def make_pilot(env, player, log=print):
         name, since = st["name"], t - st["since"]
         fsm = player.fsm
         bar, est = mug_now(t)
+        if est is not None and t - est["age"] < STALE_S and name in ("look", "nav", "tray_approach"):
+            cx, cy, hw = float(est["cup"][0]), float(est["cup"][1]), float(est["width"]) / 2 + 0.03
+            st["mug_span"] = (math.atan2(cy - hw, cx) - math.radians(3), math.atan2(cy + hw, cx) + math.radians(3))
+        else:
+            st["mug_span"] = None
+        if (mapper is not None and "mug" in mapper.fixed and est is not None and t - est["age"] < STALE_S
+                and mug_sized(est) and name in ("wander", "spot", "run", "search", "orbit", "align", "creep", "fine")
+                and t - st.get("mug_fix_t", -9.0) >= 1.0):
+            # The mug is the first landmark (the flag the second): the wander's and the
+            # jump's odometry put the crab 0.9 m short by the grasp (film68), past the
+            # flag's gate. The cup's centre, seen, against the known spot.
+            st["mug_fix_t"] = t
+            d = mapper.fix("mug", float(est["cup"][0]), float(est["cup"][1]), gain=0.5, max_m=2.5)
+            if d is not None and t - st.get("mug_fix_log_t", -9.0) >= 5.0:
+                st["mug_fix_log_t"] = t
+                tp = truth_pose() if TRUTH else None
+                log(f"\n[auto] the mug seen: the odometry was {d * 100:.0f} cm off, corrected half-way"
+                    + (f" (map {mapper.x:+.2f},{mapper.y:+.2f} truly {tp[0]:+.2f},{tp[1]:+.2f})" if tp else ""))
         # The final creep steers on the handle as SEEN, never as assumed: at depth the jaw
         # hides the handle for a frame or two and the assumed bar (the cup's face plus the
         # handle's reach) sits 3+ cm off the real one in 54 of 60 such frames (18% when
@@ -472,12 +681,72 @@ def make_pilot(env, player, log=print):
         senses.max_range = WANDER_RANGE if name in ("wander", "spot", "run") else 1.5
 
         if name == "settle":
-            if since > 1.0:
+            if since > 1.0 and START == "carry":
+                goto("seed", t)
+            elif since > 1.0:
                 if BEAT >= 2:
                     st["danced"] = BEAT == 2                # beat two remembers; beat three dances when it sees the mug
                     goto("asleep", t)
                 else:
                     goto("wander" if WANDER else "enter_claw", t)
+        elif name == "seed":
+            # The delivery alone (AUTO_START=carry): into the claw mode, the arm out, the
+            # nose down as at a grasp, the mug set into the open jaw by hand, then on to
+            # the close, the lift and the carry as after a grasp.
+            # As probe_pinch.py times it: LB, the arm out and the nose down 2 s later, the mug
+            # placed 1.4 s after that (the arm held out from the start reached only 0.22 m
+            # with the mouth 28 mm under the bar, carry1/2, and the jaw shut on air).
+            if since < 0.1:
+                s["buttons"] = frozenset({"LB"})
+            if since > 2.0:
+                s["hat_x"] = -1
+                st.setdefault("seed_ry", -NOSE_DOWN)
+                s["ry"] = st["seed_ry"]
+            if fsm.mode == "claw_left" and fsm.running_policy and since > 3.4:
+                # The stance varies run to run (the pitch -0.16 to -0.22 at this moment, the
+                # mouth +3 to -27 mm off the bar, carry5-7): past 10 mm the nose is servoed
+                # on the height first, slowly, and the mug placed inside 5 mm (or at 12 s).
+                from mug import BODY_HALF_H
+                bp = robot.data.root_link_pos_w[0].cpu().numpy(); bq = robot.data.root_link_quat_w[0].cpu().numpy()
+                dz = float((bp + _quat_rot(bq, mouth))[2] - BODY_HALF_H)
+                if abs(dz) > 0.010 and since < 12.0:
+                    st["seed_ry"] = max(-0.95, min(0.2, st["seed_ry"] - 2.0 * dz * senses.dt))
+                    if t - st.get("seed_log_t", -9.0) >= 1.0:
+                        st["seed_log_t"] = t
+                        log(f"\n[auto] seed: nose {st['seed_ry']:+.2f}, the mouth {dz * 1000:+.0f} mm over the bar")
+                    pass
+                elif abs(dz) < 0.005 or since >= 12.0:
+                    st["seed_place"] = True
+            if st.get("seed_place"):
+                if True:
+                    dz = seed_mug()
+                    bx0, bx1, by0, by1 = footprint()
+                    log(f"\n[auto] seeded at nose {st['seed_ry']:+.2f}: the mouth {dz * 1000:+.1f} mm over the bar; the body reaches "
+                        f"{-bx0:.2f} m behind, {bx1:.2f} ahead, {-by0:.2f} right, {by1:.2f} left of the base")
+                    st["lift_from"] = st["seed_ry"]
+                    goto("seed_close", t)
+        elif name == "seed_close":
+            # The trigger ramped over 0.6 s as the grasp does it, the arm-out hat held HERE
+            # (the common rule did not reach this state: the arm drew back 56 mm as the
+            # finger shut, carry5-7, and the jaw shut on air). A close that reads shut
+            # (finger > 0.05) opens, seats the mug again at the mouth and tries again.
+            s["hat_x"], s["ry"], s["lt"] = -1, st["seed_ry"], min(1.0, since / 0.6)
+            if since > 2.0:
+                mouth_mm = aperture_mm(fin)
+                if fin > 0.05 and st.get("seed_tries", 0) < 3:
+                    st["seed_tries"] = st.get("seed_tries", 0) + 1
+                    log(f"\n[auto] the seeded close shut on air (finger {fin:+.3f}): opening and seating it again, try {st['seed_tries']}")
+                    goto("seed_again", t)
+                else:
+                    log(f"\n[auto] grasped: finger at {fin:+.3f}, mouth {mouth_mm:.0f} mm for a 8 mm bar (seeded)")
+                    st["grasp_yaw"], st["sip_ok"] = senses.yaw, True
+                    goto("withdraw", t)
+        elif name == "seed_again":
+            s["hat_x"], s["ry"], s["lt"] = -1, st["seed_ry"], 0.0
+            if since > 1.4:
+                dz = seed_mug()
+                log(f"\n[auto] seeded again at nose {st['seed_ry']:+.2f}: the mouth {dz * 1000:+.1f} mm over the bar")
+                goto("seed_close", t)
         elif name == "asleep":
             # Beat two opens on the sleep (Y), the alert comes ALERT_S in: Menu leaves the
             # gesture, the walk stands it up, and A -- the jump -- is the startle.
@@ -556,7 +825,12 @@ def make_pilot(env, player, log=print):
                     # had turned it 20 deg and a serpentine on that heading passed the mug
                     # 1.5 m to the side (film1).
                     st["wander_ref"], st["wander_dir"], st["legs"] = (0.0 if BEAT == 3 else senses.yaw), 1, 0
-                yaw = senses.yaw - st["wander_ref"]
+                if mapper is not None and "mug" in mapper.fixed:
+                    # The mug marked on the map: the serpentine swings about the bearing to
+                    # it, not the room's line (Andrew: "the map position is just to get to
+                    # the object"); the sighting and the grasp are the depth sensor's alone.
+                    st["wander_ref"] = senses.yaw + math.atan2(*mapper.mark_body("mug")[::-1])
+                yaw = _wrap(senses.yaw - st["wander_ref"])
                 if st["wander_dir"] * yaw < -WANDER_SWING:   # the heading has swung far enough
                     st["wander_dir"] *= -1
                     st["legs"] += 1
@@ -805,7 +1079,7 @@ def make_pilot(env, player, log=print):
                     st["bump"], st["stall_bar"] = 0.0, None
                     goto("arm_out", t)
         elif name not in ("stow", "bow", "beckon", "circle", "sit", "sleep", "done", "excited", "wander", "spot", "run",
-                          "orbit", "asleep", "wake", "leave_claw", "unstick"):   # (look keeps it out: the mug is in it)
+                          "orbit", "asleep", "wake", "leave_claw", "unstick", "settle", "seed"):   # (look keeps it out: the mug is in it)
             s["hat_x"] = -1                     # the arm out, web up, from here on
 
         if name in ("align", "creep", "fine", "creep2", "recentre") and st["bump"] >= 0.3:
@@ -933,7 +1207,7 @@ def make_pilot(env, player, log=print):
                         log(f"\n[auto] fine's strafe out of time at ey={ey * 100:+.1f} cm: creeping anyway")
                         st["twist"], st["twist_i"], st["bump"], st["stall_bar"] = 0.0, 0.0, 0.0, None
                         goto(st["after_fine"], t)
-                    elif abs(ey) > 0.10 or st.get("recentres", 0) >= 3:
+                    elif abs(ey) > 0.10 or st.get("recentres", 0) >= 3 or not RECENTRE:
                         # (the bar half a metre off the jaw is not the mug under it: look again)
                         log(f"\n[auto] fine's strafe out of time at ey={ey * 100:+.1f} cm: looking for the mug again")
                         st["bar"], st["recentres"], st["resight"] = None, 0, True
@@ -974,8 +1248,8 @@ def make_pilot(env, player, log=print):
                 if t < st["pulse_until"]:
                     s["lx"] = -WALK_MIN * st["pulse_dir"]
                     s["rx"] = 0.0                       # a strafe under a held twist turns instead (auto5)
-                elif abs(st["twist"]) >= 0.44 and abs(ey) > 0.01 and not at_depth \
-                        and since > 0.6 and st["pulses"] < 3:
+                elif ((abs(st["twist"]) >= 0.44 and abs(ey) > 0.01) or (at_depth and not FINE2_EY[0] < ey < FINE2_EY[1])) \
+                        and since > 0.6 and st["pulses"] < (8 if at_depth else 3):
                     # (at depth the pulse is the only sideways move, the twist being off there,
                     # and a 0.3 s one gained ~5 mm: three of them left w36 3 cm off and backing
                     # away from a bar it was beside; so more of them, and a little longer)
@@ -1002,7 +1276,10 @@ def make_pilot(env, player, log=print):
                 st["recreeps"] = 0
                 st["resight"] = True                     # the mug may have turned: measure its handle's axis afresh
                 goto("backoff", t)
-            elif name == "fine2" and since > 0.8 and ex > 0.02 and st["recreeps"] < RECREEPS:
+            elif name == "fine2" and since > 0.8 and ex > DEPTH_TOL + 0.004 and st["recreeps"] < RECREEPS:
+                # (creep again from just outside the close's window: between the window and
+                # the old 0.02 nothing crept and nothing closed, and film63 stood 6 s at 1.5 cm
+                # short, twice, then backed off and lost the mug)
                 log(f"\n[auto] settled {ex * 100:.1f} cm short of the depth; creeping again")
                 st["recreeps"] += 1
                 goto("creep2", t)
@@ -1019,14 +1296,14 @@ def make_pilot(env, player, log=print):
                     goto(st["after_fine"], t)
             elif name == "fine2" and st.get("close_ok_since") is not None and since > 0.8:
                 st["close_ok_since"] = None
-            elif overshot and since > 0.4 and st.get("recentres", 0) < 3:
+            elif RECENTRE and overshot and since > 0.4 and st.get("recentres", 0) < 3:
                 # Past the depth: the creep coasts, and the finger then shuts BEHIND the bar
                 # (w81: closes at 1 and -11 mm of depth shut on air; film40 three at -49).
                 st["recentres"] = st.get("recentres", 0) + 1
                 log(f"\n[auto] {-ex * 100:.1f} cm past the depth: recentring")
                 st["recreeps"], st["pulses"], st["after_fine"] = 0, 0, "creep2"
                 goto("recentre", t)
-            elif at_depth and since > 1.5 and st.get("recentres", 0) < 3:
+            elif RECENTRE and at_depth and since > 1.5 and st.get("recentres", 0) < 3:
                 # Off the line at depth: the final creep's veer differs run to run (+2 to +15
                 # deg/s) and the fixed bias cannot cancel it -- w71 landed 2.6 cm left three
                 # times running. So back 5 cm, aim the next creep by the residual (the mouth
@@ -1039,7 +1316,7 @@ def make_pilot(env, player, log=print):
                 log(f"\n[auto] at depth {ey * 100:+.1f} cm off the line: recentring, aim {math.degrees(HEADING_BIAS + st['veer_adj']):+.1f} deg")
                 st["recreeps"], st["pulses"], st["after_fine"] = 0, 0, "creep2"
                 goto("recentre", t)
-            elif (since > 6.0 or (at_depth and since > 1.5)
+            elif (since > 6.0 or (RECENTRE and at_depth and since > 1.5)
                     or (name == "fine2" and since > 0.8 and ex >= DEPTH_TOL and st["recreeps"] >= RECREEPS)):
                 # (at depth and out of the window there is nothing to do but back off: no
                 # pulse there, w68; 1.5 s rather than 6)
@@ -1113,12 +1390,15 @@ def make_pilot(env, player, log=print):
                     goto("align", t)
         elif name == "withdraw":
             s["lt"] = 1.0
+            if mapper is not None:
+                mapper.soft.pop("mug", None)          # (in the claw now: the standing mug's cells are gone with it)
             s["rx"] = st["twist"]
             st["bump"], st["stall_bar"] = 0.0, None
             # Beat two lifts only to level: the nose up at LIFT_TO rotates the jaw and a
             # shallow pinch (17 mm) let go of the mug right there (beat2s, turn test).
             lift_to = NAV_NOSE if BEAT == 2 else LIFT_TO   # (beat 3 lifts for the sip)
-            s["ry"] = -NOSE_DOWN + (lift_to + NOSE_DOWN) * min(1.0, since / LIFT_S) if LIFT else -NOSE_DOWN
+            nose0 = st.get("lift_from", -NOSE_DOWN)             # (the seeded start lifts from its own nose)
+            s["ry"] = nose0 + (lift_to - nose0) * min(1.0, since / LIFT_S) if LIFT else nose0
             # The drink waits a further 1.5 s with the mug up: of 30 drinks, the three that lost
             # the mug all began with it hanging 22 deg or more; under 20 it held every time but one.
             if since > (LIFT_S + 0.5 + (1.5 if SIP and BEAT != 2 else 0.0) if LIFT else 0.5):
@@ -1150,15 +1430,16 @@ def make_pilot(env, player, log=print):
                 u = ((np.arange(n_cols) + 0.5) / n_cols * 2 - 1) * HALF_X
                 bearings = np.arctan2(-u, 1.0)                       # column 0 is the robot's left
                 e = _wrap(st["nav_ref"] - senses.yaw)                # the line, off the nose
-                flags = [c for c in senses.scan(near=NAV_NEAR, far=FLAG_RANGE)["clusters"] if is_flag(c)]
-                f = pick_flag(flags, t) if flags else None
+                anchor = flag_anchor(t)
+                flags = [c for c in senses.scan(near=NAV_NEAR, far=FLAG_RANGE)["clusters"] if is_flag(c, anchor)]
+                f = pick_flag(flags, t, anchor) if flags else None
                 if f is not None:
                     # The flag seen: it is the line from here on (the gyro line only points
                     # into the room), and close enough it is the tray.
                     st["flag"], st["flag_t"] = f, t
                     if not st.get("flag_seen"):
                         st["flag_seen"] = True
-                        log(f"\n[auto] the flag: {f['range']:.2f} m at {math.degrees(f['bearing']):+.0f} deg")
+                        log(f"\n[auto] the flag: {f['range']:.2f} m at {math.degrees(f['bearing']):+.0f} deg{flag_truth()}")
                 elif st.get("flag") is not None and t - st.get("flag_t", -9.0) < 3.0:
                     st["flag"]["x"] -= CREEP_SPEED * st["cmd_v"] / CREEP * senses.dt    # dead-reckoned while hidden
                     st["flag"]["range"] = float(np.hypot(st["flag"]["x"], st["flag"]["y"]))
@@ -1167,6 +1448,14 @@ def make_pilot(env, player, log=print):
                     e = st["flag"]["bearing"]
                 tray = [st["flag"]] if (st.get("flag") is not None and t - st.get("flag_t", -9.0) < 3.0
                                         and st["flag"]["range"] < 1.1) else []
+                if not tray and mapper is not None and "flag" in mapper.fixed:
+                    # The flag known: inside 1.1 m of where the map puts it the approach
+                    # begins whether or not the pole is in the picture (the carried mug
+                    # hides a pole dead ahead, beat2k)
+                    kb = mapper.mark_body("flag")
+                    if math.hypot(*kb) < 1.1:
+                        tray = [dict(x=float(kb[0]), y=float(kb[1]), range=float(math.hypot(*kb)),
+                                     bearing=float(math.atan2(kb[1], kb[0])))]
                 free = cols > NAV_FREE
                 # The runs of free columns, each shrunk by the clearance the body needs at
                 # the range of the blocked column beside it (an edge at the picture's side
@@ -1228,8 +1517,16 @@ def make_pilot(env, player, log=print):
                     # path, and the walk follows it with heading pulses -- no sidesteps, no
                     # "in the path" rule, no re-dodging a pillar already passed (w58).
                     if f is not None:
-                        mapper.mark("flag", f["x"], f["y"])
+                        flag_seen(f, t)
                     goal = mapper.marks.get("flag") or (mapper.x + 3.0, mapper.y)
+                    if "flag" in mapper.marks:
+                        # Not the pole itself but the STAND: TRAY_STAND_BACK before where the
+                        # base will be when the mouth is over the mug's spot, on the room's
+                        # line, so the last stretch is walked facing the flag. Aimed at the
+                        # pole, the path came in from the side and the crab placed the mug
+                        # turned 74 deg to the room with its face 0.2 m from the pole (film73).
+                        fx, fy = mapper.marks["flag"]
+                        goal = (fx - FLAG_BACK - TRAY_REACH - TRAY_STAND_BACK, fy - FLAG_SIDE - MOUTH_LEFT)
                     # The plan is kept for PLAN_HOLD_S once made (re-made sooner only when its
                     # point is reached or lost): re-planned twice a second from a jittering
                     # pose, the path flipped sides of the pillar ahead and the crab turned
@@ -1263,8 +1560,11 @@ def make_pilot(env, player, log=print):
                         st["hud_note"] = "along the planned path" + ("" if "flag" in mapper.marks else ", looking for the flag")
                     if t - st.get("nav_log_t", -9.0) >= 1.0:
                         st["nav_log_t"] = t
+                        tp = truth_pose() if TRUTH else None
                         log(f"\n[auto] nav {st['hud_note']}; ly={s['ly']:+.2f} rx={s['rx']:+.2f} nearest {nearest:.2f} "
-                            f"goal {goal[0]:+.2f},{goal[1]:+.2f} at {mapper.x:+.2f},{mapper.y:+.2f}")
+                            f"goal {goal[0]:+.2f},{goal[1]:+.2f} at {mapper.x:+.2f},{mapper.y:+.2f}"
+                            + (f" (truly {tp[0]:+.2f},{tp[1]:+.2f}, yaw {math.degrees(tp[2]):+.0f} vs {math.degrees(mapper.yaw):+.0f})"
+                               if tp else ""))
                 elif BEAT == 3:
                     # The film's carry: a gyro heading hold toward the flag (the walk itself
                     # drifts the heading 10-17 deg/s with the arm out, and without the hold the
@@ -1387,13 +1687,16 @@ def make_pilot(env, player, log=print):
                 s["ry"] = st.get("nav_nose", NAV_NOSE)        # (set below: up a touch while strafing, w4)
             senses.max_range = FLAG_RANGE
             scan = senses.scan(near=NAV_NEAR, far=1.8)
-            flags = [c for c in (scan["clusters"] if scan else []) if is_flag(c)]
-            f = pick_flag(flags, t) if flags else None
+            anchor = flag_anchor(t)
+            flags = [c for c in (scan["clusters"] if scan else []) if is_flag(c, anchor)]
+            f = pick_flag(flags, t, anchor) if flags else None
             if f is not None:
                 st["flag"], st["flag_t"] = f, t
-                if mapper is not None:
-                    mapper.mark("flag", f["x"], f["y"])
-            elif mapper is not None and "flag" in mapper.marks:
+                flag_seen(f, t)
+            if f is not None and mapper is not None and "flag" in mapper.fixed:
+                bx, by = mapper.mark_body("flag")             # (the mark is the truth; the sighting moved the pose)
+                st["flag"] = dict(f, x=float(bx), y=float(by))
+            elif mapper is not None and "flag" in mapper.marks and f is None:
                 # Hidden (the pole leaves the picture inside NAV_NEAR, and the mug hides it):
                 # the MAP's world point, turned and moved with the pose. The body-frame
                 # dead reckoning below only slid it back as the crab walked and never turned
@@ -1401,7 +1704,7 @@ def make_pilot(env, player, log=print):
                 # from the real one, and the crab pushed its face into the flag (film52).
                 bx, by = mapper.mark_body("flag")
                 st["flag"] = dict(st.get("flag") or {}, x=float(bx), y=float(by))
-            elif st.get("flag") is not None:
+            elif f is None and st.get("flag") is not None:
                 st["flag"]["x"] -= CREEP_SPEED * st["cmd_v"] / CREEP * senses.dt    # dead-reckoned while hidden
                 st["flag"]["y"] -= CREEP_SPEED * st.get("cmd_vy", 0.0) / CREEP * senses.dt
             c = st.get("flag")
@@ -1443,7 +1746,7 @@ def make_pilot(env, player, log=print):
                     # (at or a little past the centre: place. Backing up from "a little past"
                     # and walking back in oscillated for 30 s and the mug ratcheted round
                     # meanwhile, film25; the 40 cm tray takes a few centimetres either way)
-                    log(f"\n[auto] over the tray (the pole {c['x']:.2f} m ahead, {ey * 100:+.0f} cm off)")
+                    log(f"\n[auto] over the tray (the pole {c['x']:.2f} m ahead, {ey * 100:+.0f} cm off){stop_truth(mouth)}")
                     goto("place", t)
                 elif abs(ey) > 0.12 and ex > 0.15 and st.get("tray_strafe_s", 0.0) < 5.0:
                     # A strafe toward the centre line, only for what the 40 cm tray cannot
@@ -1460,7 +1763,7 @@ def make_pilot(env, player, log=print):
                     s["ly"] = -min(0.6, stick_mag(np.array([c["x"], c["y"]]), t, base=0.45))
                     st["cmd_vy"] = 0.0
                 else:
-                    log(f"\n[auto] over the tray (the pole {c['x']:.2f} m ahead, {ey * 100:+.0f} cm off)")
+                    log(f"\n[auto] over the tray (the pole {c['x']:.2f} m ahead, {ey * 100:+.0f} cm off){stop_truth(mouth)}")
                     goto("place", t)
                 st["hud_note"] = f"flag {c['x']:.2f} m; tray {ex * 100:+.0f} cm ahead, {ey * 100:+.0f} cm left"
                 if st.get("tray_lift_t") is None:
@@ -1532,19 +1835,37 @@ def make_pilot(env, player, log=print):
                 # So: with less than 0.7 m behind on the map, a sidestep right first (away
                 # from the mug, which hangs left of the nose), then back as far as the map
                 # allows, 0.30 m short of what is there.
+                # The body's own size, measured from its posed model (carry2): the legs reach
+                # 0.20 m behind the base, 0.26 ahead and 0.26 to each side. So "room" (the
+                # nearest occupied cell behind, from the base) less BODY_REAR less a hand's
+                # margin is what can be backed, and a sidestep comes first only when that is
+                # under 0.25 m (0.7 of room before: a pillar 0.48 m behind, 28 cm past the
+                # feet, stopped the retreat, Andrew on film70)
                 room = mapper.clearance(math.pi, 1.2) if mapper is not None else 1.2
                 if since < 0.1:
-                    st["retreat_side"] = room < 0.7
+                    st["retreat_side"] = room - BODY_REAR - 0.10 < 0.25
                     if st["retreat_side"]:
                         log(f"\n[auto] something {room:.2f} m behind on the map: a sidestep right before backing")
                 st["retreat_m"] = st.get("retreat_m", 0.0) + (CREEP_SPEED * 0.5 / CREEP * senses.dt if s["ly"] > 0 else 0.0)
                 if st.get("retreat_side") and since < 2.0:
                     s["lx"] = +0.5
-                elif st["retreat_m"] < room - 0.30:
+                elif st["retreat_m"] < min(room - BODY_REAR - 0.10, RETREAT_MAX_M):
                     s["ly"] = +0.5
                 elif since - st.get("retreat_log_t", -9.0) > 2.0:
                     st["retreat_log_t"] = since
                     log(f"\n[auto] something {room:.2f} m behind on the map: backed {st['retreat_m']:.2f} m, no further")
+            if since > 3.0 and TRUTH and not st.get("placed_logged"):
+                st["placed_logged"] = True
+                try:
+                    import room as _room
+                    mp = mug_entity.data.root_link_pos_w[0].cpu().numpy(); mq = mug_entity.data.root_link_quat_w[0].cpu().numpy()
+                    tilt = math.degrees(math.acos(max(-1.0, min(1.0, float(_quat_rot(mq, np.array([0.0, 0.0, 1.0]))[2])))))
+                    sx, sy = _room.TRAY_XY[0] + _room.FLAG_BACK - _room.MUG_SPOT_BACK, _room.TRAY_XY[1] + _room.FLAG_SIDE + _room.MUG_SPOT_SIDE
+                    on = abs(mp[0] - _room.TRAY_XY[0]) < _room.TRAY_HALF[0] and abs(mp[1] - _room.TRAY_XY[1]) < _room.TRAY_HALF[1]
+                    log(f"\n[auto] placed: the mug {(mp[0] - sx) * 100:+.0f} cm along, {(mp[1] - sy) * 100:+.0f} cm left of its spot, "
+                        f"tilt {tilt:.0f}, {'ON' if on else 'OFF'} the mat")
+                except ImportError:
+                    pass
             if since > (4.0 if BEAT == 3 else 2.4) + (1.2 if RETREAT not in ("down", "level") else 0.0) + (2.0 if st.get("retreat_side") else 0.0):
                 goto("stow", t)
         elif name == "sip":
@@ -1745,11 +2066,17 @@ def make_pilot(env, player, log=print):
 
     if mapper is not None:
         inner_pilot = pilot
-        mp = {"n": 0}
+        mp = {"n": 0, "odom_t": -9.0}
 
         def pilot(t):
             g = inner_pilot(t)
-            mapper.step(senses, t, g.ly, g.lx)
+            mapper.step(senses, t, g.ly, g.lx, LOCO_SCALE if player.fsm.mode == "locomotion" else 1.0)
+            if TRUTH and t - mp["odom_t"] >= 3.0:
+                mp["odom_t"] = t
+                tp = truth_pose()
+                log(f"\n[auto] odom {st['name']} {player.fsm.mode}: map {mapper.x:+.2f},{mapper.y:+.2f} yaw {math.degrees(mapper.yaw):+.0f} "
+                    f"truly {tp[0]:+.2f},{tp[1]:+.2f} yaw {math.degrees(tp[2]):+.0f} (off {math.hypot(mapper.x - tp[0], mapper.y - tp[1]) * 100:.0f} cm)"
+                    + (" STALLED" if mapper.stalled else ""))
             if MAP_DIR != "1" and t >= mp["n"] * MAP_DT:
                 os.makedirs(MAP_DIR, exist_ok=True)
                 mapper.picture(os.path.join(MAP_DIR, f"map_{mp['n']:05d}.png"))

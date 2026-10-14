@@ -264,8 +264,11 @@ class Senses:
             p = pts[sel]
             cx, cy = float(np.median(p[:, 0])), float(np.median(p[:, 1]))
             cols_k = np.nonzero(sel.reshape(ROWS, COLS).any(axis=0))[0]
+            rows_k = np.nonzero(sel.reshape(ROWS, COLS).any(axis=1))[0]
             clusters.append({"bearing": float(np.arctan2(cy, cx)), "range": float(np.hypot(cx, cy)),
                              "edge": bool(cols_k.min() == 0 or cols_k.max() == COLS - 1),
+                             # cut by the picture's top: its height is the picture's, not its own
+                             "top": bool(rows_k.min() == 0),
                              "near": float(p[:, 0].min()), "x": cx, "y": cy, "height": float(h[sel].max()),
                              "width": float(np.ptp(p[:, 1])), "depth": float(np.ptp(p[:, 0])), "n": int(sel.sum())})
         return {"cols": cols, "clusters": clusters}
