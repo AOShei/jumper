@@ -31,6 +31,10 @@ dance_maze.json                   dance_maze's contract: observation layout, joi
 models/dance_maze.onnx            dance_maze's policy, onnx
 models/dance_maze.rknn            dance_maze's policy, rknn
 maze.motion.trajectory.json       the recording dance_maze is driven by
+dash.json                         dash's contract: observation layout, joint order, gains
+models/dash.onnx                  dash's policy, onnx
+models/dash.rknn                  dash's policy, rknn
+dash_flat.trajectory.json         the recording dash is driven by
 gesture_bow.json                  gesture_bow's contract: observation layout, joint order, gains
 models/gesture_bow.onnx           gesture_bow's policy, onnx
 models/gesture_bow.rknn           gesture_bow's policy, rknn
@@ -43,6 +47,10 @@ gesture_paw.json                  gesture_paw's contract: observation layout, jo
 models/gesture_paw.onnx           gesture_paw's policy, onnx
 models/gesture_paw.rknn           gesture_paw's policy, rknn
 paw.motion.trajectory.json        the recording gesture_paw is driven by
+gesture_pump.json                 gesture_pump's contract: observation layout, joint order, gains
+models/gesture_pump.onnx          gesture_pump's policy, onnx
+models/gesture_pump.rknn          gesture_pump's policy, rknn
+pump.motion.trajectory.json       the recording gesture_pump is driven by
 gesture_salute.json               gesture_salute's contract: observation layout, joint order, gains
 models/gesture_salute.onnx        gesture_salute's policy, onnx
 models/gesture_salute.rknn        gesture_salute's policy, rknn
@@ -51,6 +59,14 @@ gesture_sleep.json                gesture_sleep's contract: observation layout, 
 models/gesture_sleep.onnx         gesture_sleep's policy, onnx
 models/gesture_sleep.rknn         gesture_sleep's policy, rknn
 sleep.motion.trajectory.json      the recording gesture_sleep is driven by
+gesture_threat.json               gesture_threat's contract: observation layout, joint order, gains
+models/gesture_threat.onnx        gesture_threat's policy, onnx
+models/gesture_threat.rknn        gesture_threat's policy, rknn
+threat.motion.trajectory.json     the recording gesture_threat is driven by
+gesture_wave.json                 gesture_wave's contract: observation layout, joint order, gains
+models/gesture_wave.onnx          gesture_wave's policy, onnx
+models/gesture_wave.rknn          gesture_wave's policy, rknn
+wave.motion.trajectory.json       the recording gesture_wave is driven by
 gesture_zoidberg.json             gesture_zoidberg's contract: observation layout, joint order, gains
 models/gesture_zoidberg.onnx      gesture_zoidberg's policy, onnx
 models/gesture_zoidberg.rknn      gesture_zoidberg's policy, rknn
@@ -62,6 +78,9 @@ high_jump_flat.trajectory.json    the recording jump is driven by
 locomotion.json                   locomotion's contract: observation layout, joint order, gains
 models/locomotion.onnx            locomotion's policy, onnx
 models/locomotion.rknn            locomotion's policy, rknn
+sprint.json                       sprint's contract: observation layout, joint order, gains
+models/sprint.onnx                sprint's policy, onnx
+models/sprint.rknn                sprint's policy, rknn
 reference.json                    recorded frames, so you can measure that you agree
 manual.en.json                    every key and button this bundle reads, and what each does
 bundle.json                       every file, its size and its SHA-256, and which host takes what

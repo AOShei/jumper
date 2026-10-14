@@ -97,6 +97,15 @@ NOT_LOCOMOTION = {
     # listing them as exemptions would empty the parity test rather than
     # describe it.
     "jumper.posture",
+    # jumper.posture again at a higher ceiling (the battle's dash): differs from
+    # the four exactly where posture does.
+    "jumper.sprint",
+    # jumper.jump's recording carried forward (the battle's dash): a clip, like the jump.
+    "jumper.dash",
+    # The battle's displays, clips of their own like the gestures above.
+    "jumper.gesture_threat",
+    "jumper.gesture_pump",
+    "jumper.gesture_wave",
 }
 
 #: Fields a task is allowed to differ on because **the gait fixes them**.

@@ -103,7 +103,10 @@
             "gesture_paw",
             "gesture_salute",
             "gesture_zoidberg",
-            "gesture_sleep"
+            "gesture_sleep",
+            "gesture_threat",
+            "gesture_pump",
+            "gesture_wave"
           ],
           "pad": {
             "button": "menu",
@@ -118,7 +121,10 @@
               "gesture_paw",
               "gesture_salute",
               "gesture_zoidberg",
-              "gesture_sleep"
+              "gesture_sleep",
+              "gesture_threat",
+              "gesture_pump",
+              "gesture_wave"
             ]
           },
           "keys": {
@@ -136,7 +142,10 @@
               "gesture_paw",
               "gesture_salute",
               "gesture_zoidberg",
-              "gesture_sleep"
+              "gesture_sleep",
+              "gesture_threat",
+              "gesture_pump",
+              "gesture_wave"
             ]
           }
         }
@@ -535,6 +544,121 @@
               "locomotion"
             ]
           }
+        },
+        "gesture_threat": {
+          "task": "jumper.gesture_threat",
+          "policy": "tasks/jumper/gesture_threat/out/example",
+          "_why": "The threat display: reared nose-up, both claws spread wide and high, sweeping in and snapping (tools/battle/make_threat.py). The blue crab's taunt at the bell of the crab battle; Menu + X from the walk or a claw mode.",
+          "pad": {
+            "button": "X",
+            "with": "menu",
+            "on": "toggle",
+            "from": [
+              "locomotion",
+              "claw_left",
+              "claw_right"
+            ]
+          },
+          "keys": {
+            "key": [
+              "keypad_7"
+            ],
+            "on": "toggle",
+            "from": [
+              "locomotion"
+            ]
+          }
+        },
+        "gesture_pump": {
+          "task": "jumper.gesture_pump",
+          "policy": "tasks/jumper/gesture_pump/out/example",
+          "_why": "The claw pump: both claws straight up, the body bouncing twice a second, the claws snapping at the bottom of every bounce (tools/battle/make_pump.py). The red crab's victory dance; Menu + Y.",
+          "pad": {
+            "button": "Y",
+            "with": "menu",
+            "on": "toggle",
+            "from": [
+              "locomotion",
+              "claw_left",
+              "claw_right"
+            ]
+          },
+          "keys": {
+            "key": [
+              "keypad_8"
+            ],
+            "on": "toggle",
+            "from": [
+              "locomotion"
+            ]
+          }
+        },
+        "gesture_wave": {
+          "task": "jumper.gesture_wave",
+          "policy": "tasks/jumper/gesture_wave/out/example",
+          "_why": "The wave: claws spread, the body rolling side to side, the high-side claw rising and snapping with each roll (tools/battle/make_wave.py). The blue crab's victory dance; Menu + A.",
+          "pad": {
+            "button": "A",
+            "with": "menu",
+            "on": "toggle",
+            "from": [
+              "locomotion",
+              "claw_left",
+              "claw_right"
+            ]
+          },
+          "keys": {
+            "key": [
+              "keypad_9"
+            ],
+            "on": "toggle",
+            "from": [
+              "locomotion"
+            ]
+          }
+        },
+        "sprint": {
+          "task": "jumper.sprint",
+          "policy": "tasks/jumper/sprint/out/example",
+          "_why": "The dash: jumper.posture again at a 1.2 m/s ceiling (tasks/jumper/sprint), the same sticks and keys. The crab battle's bull charges in it (tools/battle/pilots/brain.py); Menu + LB from locomotion (B is locomotion's own let-go, and every plain button is taken), the chord again to walk.",
+          "pad": {
+            "button": "LB",
+            "with": "menu",
+            "on": "toggle",
+            "from": [
+              "locomotion"
+            ]
+          },
+          "keys": {
+            "key": [
+              "keypad_6"
+            ],
+            "on": "toggle",
+            "from": [
+              "locomotion"
+            ]
+          }
+        },
+        "dash": {
+          "task": "jumper.dash",
+          "policy": "tasks/jumper/dash/out/example",
+          "pad": {
+            "button": "L3",
+            "on": "toggle",
+            "from": [
+              "locomotion"
+            ]
+          },
+          "keys": {
+            "key": [
+              "keypad_5"
+            ],
+            "on": "toggle",
+            "from": [
+              "locomotion"
+            ]
+          },
+          "_why": "The dash: the high jump's recording carried 0.47 m forward (tasks/jumper/dash). The crab battle's bull hops at its foe with it (tools/battle/pilots/brain.py); L3 from the walk (Num 5), and it hands back to locomotion when the hop ends, as the jump does."
         }
       }
     }
