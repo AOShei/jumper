@@ -181,6 +181,11 @@
           "control": "dpad_left",
           "pad": "D-pad left",
           "does": "holds the carried arm straight out, thumb-web up, while held"
+        },
+        {
+          "control": "dpad_right",
+          "pad": "D-pad right",
+          "does": "holds the carried arm bent in, the claw before the visor, while held"
         }
       ],
       "keys": [
@@ -235,6 +240,10 @@
         {
           "key": "O",
           "does": "roll, right side down"
+        },
+        {
+          "key": "Q",
+          "does": "holds the carried arm bent in, the claw before the visor, while held"
         },
         {
           "key": "→",
@@ -328,6 +337,11 @@
           "control": "dpad_left",
           "pad": "D-pad left",
           "does": "holds the carried arm straight out, thumb-web up, while held"
+        },
+        {
+          "control": "dpad_right",
+          "pad": "D-pad right",
+          "does": "holds the carried arm bent in, the claw before the visor, while held"
         }
       ],
       "keys": [
@@ -382,6 +396,10 @@
         {
           "key": "O",
           "does": "roll, right side down"
+        },
+        {
+          "key": "Q",
+          "does": "holds the carried arm bent in, the claw before the visor, while held"
         },
         {
           "key": "→",
@@ -506,6 +524,28 @@
       "keys": []
     },
     {
+      "mode": "gesture_sleep",
+      "task": "jumper.gesture_sleep",
+      "default": false,
+      "summary": "A recorded motion, 18.8 s long, that starts the moment this mode is entered.",
+      "enter": "Y or keyboard: Q",
+      "leave": "Hands back to locomotion by itself when the motion ends; the switch pressed again stops it early. Menu, pressed and let go on its own or keyboard: Ctrl, pressed and let go on its own interrupts it and goes back to locomotion.",
+      "keyboard": "This mode reads no sticks, triggers or keys.",
+      "controls": [],
+      "keys": []
+    },
+    {
+      "mode": "gesture_zoidberg",
+      "task": "jumper.gesture_zoidberg",
+      "default": false,
+      "summary": "A recorded motion, 10.5 s long, that starts the moment this mode is entered.",
+      "enter": "X or keyboard: G",
+      "leave": "Hands back to locomotion by itself when the motion ends; the switch pressed again stops it early. Menu, pressed and let go on its own or keyboard: Ctrl, pressed and let go on its own interrupts it and goes back to locomotion.",
+      "keyboard": "This mode reads no sticks, triggers or keys.",
+      "controls": [],
+      "keys": []
+    },
+    {
       "mode": "jump",
       "task": "jumper.jump",
       "default": false,
@@ -527,6 +567,32 @@
       "does": "switch to jump; press again to switch back (from locomotion only)",
       "from": [
         "locomotion"
+      ]
+    },
+    {
+      "device": "pad",
+      "control": "X",
+      "with": null,
+      "keys": [],
+      "pad": "X",
+      "does": "switch to gesture_zoidberg; press again to switch back (from locomotion, claw_left, claw_right only)",
+      "from": [
+        "locomotion",
+        "claw_left",
+        "claw_right"
+      ]
+    },
+    {
+      "device": "pad",
+      "control": "Y",
+      "with": null,
+      "keys": [],
+      "pad": "Y",
+      "does": "switch to gesture_sleep; press again to switch back (from locomotion, claw_left, claw_right only)",
+      "from": [
+        "locomotion",
+        "claw_left",
+        "claw_right"
       ]
     },
     {
@@ -559,7 +625,7 @@
       "with": null,
       "keys": [],
       "pad": "Menu, pressed and let go on its own",
-      "does": "leave dance_crab, dance_brazilian, dance_maze, dance_dream_wings, gesture_hello, gesture_bow, gesture_paw, gesture_salute -- whichever is on -- back to locomotion (from dance_crab, dance_brazilian, dance_maze, dance_dream_wings, gesture_hello, gesture_bow, gesture_paw, gesture_salute only)",
+      "does": "leave dance_crab, dance_brazilian, dance_maze, dance_dream_wings, gesture_hello, gesture_bow, gesture_paw, gesture_salute, gesture_zoidberg, gesture_sleep -- whichever is on -- back to locomotion (from dance_crab, dance_brazilian, dance_maze, dance_dream_wings, gesture_hello, gesture_bow, gesture_paw, gesture_salute, gesture_zoidberg, gesture_sleep only)",
       "from": [
         "dance_crab",
         "dance_brazilian",
@@ -568,7 +634,9 @@
         "gesture_hello",
         "gesture_bow",
         "gesture_paw",
-        "gesture_salute"
+        "gesture_salute",
+        "gesture_zoidberg",
+        "gesture_sleep"
       ]
     },
     {
@@ -707,7 +775,7 @@
         "Ctrl"
       ],
       "pad": null,
-      "does": "leave dance_crab, dance_brazilian, dance_maze, dance_dream_wings, gesture_hello, gesture_bow, gesture_paw, gesture_salute -- whichever is on -- back to locomotion (from dance_crab, dance_brazilian, dance_maze, dance_dream_wings, gesture_hello, gesture_bow, gesture_paw, gesture_salute only)",
+      "does": "leave dance_crab, dance_brazilian, dance_maze, dance_dream_wings, gesture_hello, gesture_bow, gesture_paw, gesture_salute, gesture_zoidberg, gesture_sleep -- whichever is on -- back to locomotion (from dance_crab, dance_brazilian, dance_maze, dance_dream_wings, gesture_hello, gesture_bow, gesture_paw, gesture_salute, gesture_zoidberg, gesture_sleep only)",
       "from": [
         "dance_crab",
         "dance_brazilian",
@@ -716,7 +784,9 @@
         "gesture_hello",
         "gesture_bow",
         "gesture_paw",
-        "gesture_salute"
+        "gesture_salute",
+        "gesture_zoidberg",
+        "gesture_sleep"
       ]
     },
     {
@@ -951,6 +1021,32 @@
       "from": [
         "locomotion",
         "claw_left"
+      ]
+    },
+    {
+      "device": "keyboard",
+      "control": "key_g",
+      "with": null,
+      "keys": [
+        "G"
+      ],
+      "pad": null,
+      "does": "switch to gesture_zoidberg; press again to switch back (from locomotion only)",
+      "from": [
+        "locomotion"
+      ]
+    },
+    {
+      "device": "keyboard",
+      "control": "key_q",
+      "with": null,
+      "keys": [
+        "Q"
+      ],
+      "pad": null,
+      "does": "switch to gesture_sleep; press again to switch back (from locomotion only)",
+      "from": [
+        "locomotion"
       ]
     },
     {

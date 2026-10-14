@@ -1,6 +1,6 @@
 # jumper
 
-A robot controller and the policies it runs, exported from kk-rl-mjlab -- one
+A robot controller and the policies it runs, exported from KingKongRobotics/jumper -- one
 bundle for every host: the robot's board, a browser, and `play`.
 
 ```
@@ -47,6 +47,14 @@ gesture_salute.json               gesture_salute's contract: observation layout,
 models/gesture_salute.onnx        gesture_salute's policy, onnx
 models/gesture_salute.rknn        gesture_salute's policy, rknn
 salute.motion.trajectory.json     the recording gesture_salute is driven by
+gesture_sleep.json                gesture_sleep's contract: observation layout, joint order, gains
+models/gesture_sleep.onnx         gesture_sleep's policy, onnx
+models/gesture_sleep.rknn         gesture_sleep's policy, rknn
+sleep.motion.trajectory.json      the recording gesture_sleep is driven by
+gesture_zoidberg.json             gesture_zoidberg's contract: observation layout, joint order, gains
+models/gesture_zoidberg.onnx      gesture_zoidberg's policy, onnx
+models/gesture_zoidberg.rknn      gesture_zoidberg's policy, rknn
+zoidberg.motion.trajectory.json   the recording gesture_zoidberg is driven by
 jump.json                         jump's contract: observation layout, joint order, gains
 models/jump.onnx                  jump's policy, onnx
 models/jump.rknn                  jump's policy, rknn
@@ -62,7 +70,7 @@ bundle.json                       every file, its size and its SHA-256, and whic
 `manual.en.json` is written by the build from the controller's own account of
 its pad and its keys, so it describes exactly the bindings here. A translation travels
 beside it as `manual.<language>.json` -- `manual.zh.json` in Chinese -- listed
-in `bundle.json`'s `manuals`. `deploy/app.schema` in kk-rl-mjlab describes every
+in `bundle.json`'s `manuals`. `deploy/app.schema` in KingKongRobotics/jumper describes every
 file a bundle may hold and the format of each, and every build is checked
 against it.
 
@@ -99,7 +107,7 @@ Everything else comes from the contracts here, and `--dry-run` prints what it
 will use -- the DDS domains, the QoS file, each mode's controls as its contract
 gives them -- and every note and stub.
 
-With `play`, from kk-rl-mjlab -- every mode, on this bundle's own keys and a
+With `play`, from KingKongRobotics/jumper -- every mode, on this bundle's own keys and a
 gamepad, the controller's own joint targets driving the simulated servos:
 
 ```bash
@@ -116,7 +124,7 @@ The rest of this file is for a browser.
 
 **The controller here is the one the robot runs.** Not the same logic
 reimplemented from the same contract -- the same compiled object, built from
-`deploy/fsm` at commit `ce71f79b191766f0208dca34516564a37816c729`. That is the point of shipping it: three
+`deploy/fsm` at commit `2e6d1fd289eda4230cb1d031e2ea71489357b868`. That is the point of shipping it: three
 implementations of one observation agreed by people reading each other's code,
 and a sign corrected in one left the other two wrong with every other number
 still correct.
@@ -424,4 +432,4 @@ loader error nobody can read.
 
 ---
 
-Built by `scripts/deploy.py` from kk-rl-mjlab `ce71f79b191766f0208dca34516564a37816c729`.
+Built by `scripts/deploy.py` from KingKongRobotics/jumper `2e6d1fd289eda4230cb1d031e2ea71489357b868`.

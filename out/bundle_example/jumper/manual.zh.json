@@ -181,6 +181,11 @@
           "control": "dpad_left",
           "pad": "十字键左",
           "does": "按住时手臂向前伸直，虎口朝上"
+        },
+        {
+          "control": "dpad_right",
+          "pad": "十字键右",
+          "does": "按住时手臂向内弯曲，爪子停在面罩前"
         }
       ],
       "keys": [
@@ -237,6 +242,10 @@
           "does": "横滚：右侧低"
         },
         {
+          "key": "Q",
+          "does": "按住时手臂向内弯曲，爪子停在面罩前"
+        },
+        {
           "key": "→",
           "does": "右移"
         },
@@ -250,7 +259,7 @@
         },
         {
           "key": "Space",
-          "does": "按住越久，左爪夹得越紧；松开即张开"
+          "does": "按多深，左爪就夹多紧"
         },
         {
           "key": "U",
@@ -328,6 +337,11 @@
           "control": "dpad_left",
           "pad": "十字键左",
           "does": "按住时手臂向前伸直，虎口朝上"
+        },
+        {
+          "control": "dpad_right",
+          "pad": "十字键右",
+          "does": "按住时手臂向内弯曲，爪子停在面罩前"
         }
       ],
       "keys": [
@@ -384,6 +398,10 @@
           "does": "横滚：右侧低"
         },
         {
+          "key": "Q",
+          "does": "按住时手臂向内弯曲，爪子停在面罩前"
+        },
+        {
           "key": "→",
           "does": "右移"
         },
@@ -397,7 +415,7 @@
         },
         {
           "key": "Space",
-          "does": "按住越久，右爪夹得越紧；松开即张开"
+          "does": "按多深，右爪就夹多紧"
         },
         {
           "key": "U",
@@ -506,6 +524,28 @@
       "keys": []
     },
     {
+      "mode": "gesture_sleep",
+      "task": "jumper.gesture_sleep",
+      "default": false,
+      "summary": "一段 18.8 秒的录制动作，进入此模式即开始播放。",
+      "enter": "Y，或键盘：Q",
+      "leave": "动作播完后自动回到 locomotion；再按一次切换键可提前停止。单独按下再松开 Menu（键盘：单独按下再松开 Ctrl）会打断动作，回到 locomotion。",
+      "keyboard": "此模式不读取任何摇杆、扳机或按键。",
+      "controls": [],
+      "keys": []
+    },
+    {
+      "mode": "gesture_zoidberg",
+      "task": "jumper.gesture_zoidberg",
+      "default": false,
+      "summary": "一段 10.5 秒的录制动作，进入此模式即开始播放。",
+      "enter": "X，或键盘：G",
+      "leave": "动作播完后自动回到 locomotion；再按一次切换键可提前停止。单独按下再松开 Menu（键盘：单独按下再松开 Ctrl）会打断动作，回到 locomotion。",
+      "keyboard": "此模式不读取任何摇杆、扳机或按键。",
+      "controls": [],
+      "keys": []
+    },
+    {
       "mode": "jump",
       "task": "jumper.jump",
       "default": false,
@@ -527,6 +567,32 @@
       "does": "进入 jump；再按一次退出（仅在 locomotion 中有效）",
       "from": [
         "locomotion"
+      ]
+    },
+    {
+      "device": "pad",
+      "control": "X",
+      "with": null,
+      "keys": [],
+      "pad": "X",
+      "does": "进入 gesture_zoidberg；再按一次退出（仅在 locomotion、claw_left、claw_right 中有效）",
+      "from": [
+        "locomotion",
+        "claw_left",
+        "claw_right"
+      ]
+    },
+    {
+      "device": "pad",
+      "control": "Y",
+      "with": null,
+      "keys": [],
+      "pad": "Y",
+      "does": "进入 gesture_sleep；再按一次退出（仅在 locomotion、claw_left、claw_right 中有效）",
+      "from": [
+        "locomotion",
+        "claw_left",
+        "claw_right"
       ]
     },
     {
@@ -559,7 +625,7 @@
       "with": null,
       "keys": [],
       "pad": "单独按下再松开 Menu",
-      "does": "退出 dance_crab、dance_brazilian、dance_maze、dance_dream_wings、gesture_hello、gesture_bow、gesture_paw、gesture_salute 中正在进行的那一个，回到 locomotion（仅在 dance_crab、dance_brazilian、dance_maze、dance_dream_wings、gesture_hello、gesture_bow、gesture_paw、gesture_salute 中有效）",
+      "does": "退出 dance_crab、dance_brazilian、dance_maze、dance_dream_wings、gesture_hello、gesture_bow、gesture_paw、gesture_salute、gesture_zoidberg、gesture_sleep 中正在进行的那一个，回到 locomotion（仅在 dance_crab、dance_brazilian、dance_maze、dance_dream_wings、gesture_hello、gesture_bow、gesture_paw、gesture_salute、gesture_zoidberg、gesture_sleep 中有效）",
       "from": [
         "dance_crab",
         "dance_brazilian",
@@ -568,7 +634,9 @@
         "gesture_hello",
         "gesture_bow",
         "gesture_paw",
-        "gesture_salute"
+        "gesture_salute",
+        "gesture_zoidberg",
+        "gesture_sleep"
       ]
     },
     {
@@ -707,7 +775,7 @@
         "Ctrl"
       ],
       "pad": null,
-      "does": "退出 dance_crab、dance_brazilian、dance_maze、dance_dream_wings、gesture_hello、gesture_bow、gesture_paw、gesture_salute 中正在进行的那一个，回到 locomotion（仅在 dance_crab、dance_brazilian、dance_maze、dance_dream_wings、gesture_hello、gesture_bow、gesture_paw、gesture_salute 中有效）",
+      "does": "退出 dance_crab、dance_brazilian、dance_maze、dance_dream_wings、gesture_hello、gesture_bow、gesture_paw、gesture_salute、gesture_zoidberg、gesture_sleep 中正在进行的那一个，回到 locomotion（仅在 dance_crab、dance_brazilian、dance_maze、dance_dream_wings、gesture_hello、gesture_bow、gesture_paw、gesture_salute、gesture_zoidberg、gesture_sleep 中有效）",
       "from": [
         "dance_crab",
         "dance_brazilian",
@@ -716,7 +784,9 @@
         "gesture_hello",
         "gesture_bow",
         "gesture_paw",
-        "gesture_salute"
+        "gesture_salute",
+        "gesture_zoidberg",
+        "gesture_sleep"
       ]
     },
     {
@@ -951,6 +1021,32 @@
       "from": [
         "locomotion",
         "claw_left"
+      ]
+    },
+    {
+      "device": "keyboard",
+      "control": "key_g",
+      "with": null,
+      "keys": [
+        "G"
+      ],
+      "pad": null,
+      "does": "进入 gesture_zoidberg；再按一次退出（仅在 locomotion 中有效）",
+      "from": [
+        "locomotion"
+      ]
+    },
+    {
+      "device": "keyboard",
+      "control": "key_q",
+      "with": null,
+      "keys": [
+        "Q"
+      ],
+      "pad": null,
+      "does": "进入 gesture_sleep；再按一次退出（仅在 locomotion 中有效）",
+      "from": [
+        "locomotion"
       ]
     },
     {

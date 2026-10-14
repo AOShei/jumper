@@ -158,6 +158,18 @@ enter = "gesture_paw"
 when = "button:gesture_salute"
 enter = "gesture_salute"
 
+# The Zoidberg (tools/fetch/make_zoidberg.py, 2026-10-13): a gesture of this
+# repository's own, on X, reachable from the claw modes too so the fetch's
+# excitement needs no detour through the walk.
+[[fsm.rule]]
+when = "button:gesture_zoidberg"
+enter = "gesture_zoidberg"
+
+# The sleep (tools/fetch/make_sleep.py, 2026-10-13): the same kind of gesture, on Y.
+[[fsm.rule]]
+when = "button:gesture_sleep"
+enter = "gesture_sleep"
+
 # The claw, carried on either side: one jumper.five_foot export, two modes, the
 # side in each one's hook. Below the recordings, and that is not only habit:
 # the pad's Menu + d-pad chords reach a dance from a claw mode, whose own
@@ -186,15 +198,15 @@ enter = "locomotion"
 name = "leave_motion"
 pad = "menu"
 on = "fall"
-from = ["dance_crab", "dance_brazilian", "dance_maze", "dance_dream_wings", "gesture_hello", "gesture_bow", "gesture_paw", "gesture_salute"]
-leaves = ["dance_crab", "dance_brazilian", "dance_maze", "dance_dream_wings", "gesture_hello", "gesture_bow", "gesture_paw", "gesture_salute"]
+from = ["dance_crab", "dance_brazilian", "dance_maze", "dance_dream_wings", "gesture_hello", "gesture_bow", "gesture_paw", "gesture_salute", "gesture_zoidberg", "gesture_sleep"]
+leaves = ["dance_crab", "dance_brazilian", "dance_maze", "dance_dream_wings", "gesture_hello", "gesture_bow", "gesture_paw", "gesture_salute", "gesture_zoidberg", "gesture_sleep"]
 
 [[fsm.button]]
 name = "leave_motion"
 key = "ctrl"
 on = "fall"
-from = ["dance_crab", "dance_brazilian", "dance_maze", "dance_dream_wings", "gesture_hello", "gesture_bow", "gesture_paw", "gesture_salute"]
-leaves = ["dance_crab", "dance_brazilian", "dance_maze", "dance_dream_wings", "gesture_hello", "gesture_bow", "gesture_paw", "gesture_salute"]
+from = ["dance_crab", "dance_brazilian", "dance_maze", "dance_dream_wings", "gesture_hello", "gesture_bow", "gesture_paw", "gesture_salute", "gesture_zoidberg", "gesture_sleep"]
+leaves = ["dance_crab", "dance_brazilian", "dance_maze", "dance_dream_wings", "gesture_hello", "gesture_bow", "gesture_paw", "gesture_salute", "gesture_zoidberg", "gesture_sleep"]
 
 [[fsm.button]]
 name = "claw_left"
@@ -377,6 +389,30 @@ on = "toggle"
 from = ["locomotion"]
 
 [[fsm.button]]
+name = "gesture_sleep"
+pad = "Y"
+on = "toggle"
+from = ["locomotion", "claw_left", "claw_right"]
+
+[[fsm.button]]
+name = "gesture_sleep"
+key = "key_q"
+on = "toggle"
+from = ["locomotion"]
+
+[[fsm.button]]
+name = "gesture_zoidberg"
+pad = "X"
+on = "toggle"
+from = ["locomotion", "claw_left", "claw_right"]
+
+[[fsm.button]]
+name = "gesture_zoidberg"
+key = "key_g"
+on = "toggle"
+from = ["locomotion"]
+
+[[fsm.button]]
 name = "jump"
 pad = "A"
 on = "toggle"
@@ -439,6 +475,16 @@ task = "jumper.gesture_paw"
 name = "gesture_salute"
 model = "gesture_salute.onnx"
 task = "jumper.gesture_salute"
+
+[[fsm.state]]
+name = "gesture_sleep"
+model = "gesture_sleep.onnx"
+task = "jumper.gesture_sleep"
+
+[[fsm.state]]
+name = "gesture_zoidberg"
+model = "gesture_zoidberg.onnx"
+task = "jumper.gesture_zoidberg"
 
 [[fsm.state]]
 name = "jump"
