@@ -1,8 +1,8 @@
 {
   "_source": "deploy/convert/onnx2rknn.py -- reconvert whenever actor.onnx changes",
-  "created": "2026-10-14T18:44:28+00:00",
+  "created": "2026-10-14T19:32:19+00:00",
   "onnx": "tasks/jumper/dash/out/example/actor.onnx",
-  "onnx_sha256": "84523c979bf5dbd187a4bfd62aa905654e641f28eb0e5841b993019985a5a4b4",
+  "onnx_sha256": "5655862e5ee8a7f68fa53ef9e5b35d022f66d1b3ea7005580ee13b5f9d1dbe84",
   "target_platform": "rk3576",
   "quantized": false,
   "precision": "float16",
@@ -13,9 +13,9 @@
     "samples": 64,
     "seed": 0,
     "observations": "baked_normalizer",
-    "max_abs_diff": 0.001671910285949707,
-    "mean_abs_diff": 0.00017747740741924645,
-    "max_abs_output": 2.3043949604034424,
+    "max_abs_diff": 0.0013530850410461426,
+    "mean_abs_diff": 0.00015552318939171528,
+    "max_abs_output": 1.500319004058838,
     "tolerance": 0.02
   },
   "task_contract": {

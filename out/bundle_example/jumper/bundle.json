@@ -288,11 +288,11 @@
     },
     "dash.json": {
       "bytes": 6695,
-      "sha256": "30ee694969d9150a2a09d487e39d3fed66bc9455d4619ade1c2014968ece9b6e"
+      "sha256": "f4d73240614a091fb14cf5664c4c573c39d0d78c415e2f7ccbf54490021ca3f0"
     },
     "dash_flat.trajectory.json": {
-      "bytes": 120211,
-      "sha256": "3b8e5ccea8f84e29fe5b2e9f293dbcf663ec6389ef629ada7ed93bc0457a1015"
+      "bytes": 120204,
+      "sha256": "d342009fd1cbf453a8c0a0f36075fb3173c8030946052a5c60d43288425842c6"
     },
     "demo.motion.trajectory.json": {
       "bytes": 4806304,
@@ -372,7 +372,7 @@
     },
     "models/claw_left.rknn": {
       "bytes": 931368,
-      "sha256": "21b2145eeb53866f882c5b14775b184f835bc4ded385619aa32f0985cd6eef89"
+      "sha256": "91104909473c7d2fc78d39514b1841d640e76191a1feb213845b42bbcc4f62a5"
     },
     "models/dance_brazilian.onnx": {
       "bytes": 1129112,
@@ -380,7 +380,7 @@
     },
     "models/dance_brazilian.rknn": {
       "bytes": 731304,
-      "sha256": "b952a39909280b7107d47ffe49ade95fe483382f1dd49434c13ce983aaa68829"
+      "sha256": "3047d68571d78c7e3b2ec6d01208dfa836118987953897a5911bf9852c6cfc66"
     },
     "models/dance_crab.onnx": {
       "bytes": 1129112,
@@ -388,7 +388,7 @@
     },
     "models/dance_crab.rknn": {
       "bytes": 731304,
-      "sha256": "518388485ef7b4c799530c80f7ec916a8ac657b447a19567de5de96efd18310d"
+      "sha256": "bc90bb453bf8d6b6ab1ce1a69059d382bec6e7e4ffb667b004139c9140577f53"
     },
     "models/dance_dream_wings.onnx": {
       "bytes": 1129112,
@@ -396,7 +396,7 @@
     },
     "models/dance_dream_wings.rknn": {
       "bytes": 731304,
-      "sha256": "7128b92d69bedd8ac1638bce6342d0c02f39ca740578e8f6278c5d428dda726f"
+      "sha256": "fbe233e5ba6d6bc991b7f119de6073eff7ab350246e72da05e841f54cf78a1a4"
     },
     "models/dance_maze.onnx": {
       "bytes": 1129112,
@@ -404,15 +404,15 @@
     },
     "models/dance_maze.rknn": {
       "bytes": 731304,
-      "sha256": "bdfdb17cd8adebb2730668f0f65ead6ea6ee96808e4cb4c7290aabc928e492b7"
+      "sha256": "013486851d59d1aaeea512bb3a972dfceaaf11676996baa9ab926b664967a2ca"
     },
     "models/dash.onnx": {
       "bytes": 1014038,
-      "sha256": "84523c979bf5dbd187a4bfd62aa905654e641f28eb0e5841b993019985a5a4b4"
+      "sha256": "5655862e5ee8a7f68fa53ef9e5b35d022f66d1b3ea7005580ee13b5f9d1dbe84"
     },
     "models/dash.rknn": {
       "bytes": 633704,
-      "sha256": "05b2d5056af71732871e89603e9587ae9c15b318da100b7f84d3828b194ee297"
+      "sha256": "db06d35219cc6714bbc63ab2c402664a827d8cfdc3d8a6e7c377db0a60c875f2"
     },
     "models/gesture_bow.onnx": {
       "bytes": 1129112,
@@ -420,7 +420,7 @@
     },
     "models/gesture_bow.rknn": {
       "bytes": 731304,
-      "sha256": "b9eae4fbc02bb2aaf7f44d750b3d106c1b4c4fd3573e62c720a64dcbaa3bcc94"
+      "sha256": "424682fe651ee09f825182b3d1192b704e69efbeb0ea78edfa7fb0e9267de287"
     },
     "models/gesture_hello.onnx": {
       "bytes": 1129112,
@@ -428,7 +428,7 @@
     },
     "models/gesture_hello.rknn": {
       "bytes": 731304,
-      "sha256": "2c63daaf0d2c8cb1648c5e2871c5558c00ac616a7380caeaf21b106efa07b404"
+      "sha256": "63abb5ecfe333f0358dc5e6b296aa051e6f6f827f7f01413891c3acacdb9f728"
     },
     "models/gesture_paw.onnx": {
       "bytes": 1129112,
@@ -436,7 +436,7 @@
     },
     "models/gesture_paw.rknn": {
       "bytes": 731304,
-      "sha256": "1ff4c13f5d6f7bd7405fe484d29c9efe7a2a02786bd6bd7260c699f026563098"
+      "sha256": "6308ed9ddbd96f3dd947faf27ee519f26adb848f9609cbfd985f779624fa8ef1"
     },
     "models/gesture_pump.onnx": {
       "bytes": 1129112,
@@ -452,7 +452,7 @@
     },
     "models/gesture_salute.rknn": {
       "bytes": 731304,
-      "sha256": "07ef8ac09c8377f4d0ca230f9567742a98f0f83938cc282689c0793474c6fbfb"
+      "sha256": "85c87ea60dcb3dfc38f8a930812e015c52ba7d9b77ddb70d7f4c4b011e259975"
     },
     "models/gesture_sleep.onnx": {
       "bytes": 1129112,
@@ -460,7 +460,7 @@
     },
     "models/gesture_sleep.rknn": {
       "bytes": 731304,
-      "sha256": "772da1bc101ca3c2bb16869a8ad15f6933a6bfc6195e8cb8f5cbbc28f1735589"
+      "sha256": "8fc769bd4626e97c9b8ec193ab4822226586693d130c75899e02c13e130d368a"
     },
     "models/gesture_threat.onnx": {
       "bytes": 1129112,
@@ -484,7 +484,7 @@
     },
     "models/gesture_zoidberg.rknn": {
       "bytes": 731304,
-      "sha256": "2261150759cb9f6e50ef8d35f32c4ffcc3f975647019947db830183cc1478267"
+      "sha256": "41ff0380d5c266c1c3d9774ccdbd29146d318881b49db54ab4c498ce28e09d0b"
     },
     "models/jump.onnx": {
       "bytes": 1014038,
@@ -492,7 +492,7 @@
     },
     "models/jump.rknn": {
       "bytes": 633704,
-      "sha256": "f2237b3a7d713dfb65ce1ee0136224a70d093195ce56aacfe3104184b7a48487"
+      "sha256": "3330cfa18ce08d973e552d194d39da0c2b98a91301b9e785bbdaa1d873f73c93"
     },
     "models/locomotion.onnx": {
       "bytes": 1552128,
@@ -500,7 +500,7 @@
     },
     "models/locomotion.rknn": {
       "bytes": 932136,
-      "sha256": "d591af7c69a7cecedea0f5d3705d3931c5a8925a16302c9e372694e15109f023"
+      "sha256": "fd4eeeb1ebf3468497113a1b12adb6241c5d7cff2e95a180f75e3aa6d88c47f3"
     },
     "models/sprint.onnx": {
       "bytes": 1552128,
@@ -528,7 +528,7 @@
     },
     "runtime/mjlab/linux-x86_64/controller.so": {
       "bytes": 2031472,
-      "sha256": "c027adbb14e53d8b03c74d6e448fcc4a71b788c3ab25851e4012b1f0815f28c4"
+      "sha256": "6403cf6b2864c1b2e9785641abbec0cf8cec8a55dbceb1a7f92a870a9c070c4b"
     },
     "runtime/mjlab/macosx-universal2/controller.so": {
       "bytes": 6467280,
@@ -536,7 +536,7 @@
     },
     "runtime/mjlab/win-amd64/controller.pyd": {
       "bytes": 3299085,
-      "sha256": "49344915be862d152b7bdde6d62b5071720e323be2d30768f2b8a3e72384444e"
+      "sha256": "ff1e427e57f8760d790c7f7c663b4bb7763db69d16957711a14cd633c1e15d24"
     },
     "runtime/web/controller.js": {
       "bytes": 29783,
@@ -544,7 +544,7 @@
     },
     "runtime/web/controller.wasm": {
       "bytes": 1231548,
-      "sha256": "6010ff131241a52cfff072063b05d58b2c84b45f434ace3b48e381eff28dc525"
+      "sha256": "2fbdc3120fa00252a31d49608f06df79c84318b334d8b3b30c9e60c15344256b"
     },
     "salute.motion.trajectory.json": {
       "bytes": 98320,
@@ -1053,7 +1053,7 @@
     },
     "dash": {
       "task": "jumper.dash",
-      "from": "logs/jumper/jumper.dash/2026-10-14_18-13-39/model_4599.pt",
+      "from": "logs/jumper/jumper.dash/2026-10-14_20-53-48/model_6598.pt",
       "export": "tasks/jumper/dash/out/example",
       "pad": {
         "button": "L3",

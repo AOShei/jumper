@@ -25,6 +25,17 @@ DASH_REF_NPZ = Path(__file__).resolve().parent / "ref" / "dash_flat.npz"
 def env_cfg(*args, **kwargs):
     cfg = _jump.env_cfg(*args, **kwargs)
     cfg.commands["jump"].motion_file = str(DASH_REF_NPZ)
+    # The jump's weights hold the dash to the jump's shape: trained with them as they
+    # were (1500 iterations resumed from the jump's policy, 2048 envs, RTX 3060),
+    # the hop gained 0.10 m a time in the duel against the 0.47 m of its reference
+    # (tools/battle/pilots/brain.py logs the range before and after). The reference's
+    # joint angles are the jump's, so the joint and foot terms score standing in
+    # place as well as hopping forward, and only the velocity term, at sigma_sq 0.30
+    # (0.72 m/s short scores 0.18) over the 0.42 s flight of a 3.5 s episode, asks
+    # for the travel. The dash owns these three numbers; everything else is the jump's.
+    cfg.rewards["ref_base_lin_vel"].weight = 6.0
+    cfg.rewards["ref_base_lin_vel"].params["sigma_sq"] = 0.08
+    cfg.rewards["ref_joint_pos"].weight = 1.5
 
     def _reference_contract() -> dict:
         # The jump's, with the dash's recording: see `_jump.env_cfg` for why the

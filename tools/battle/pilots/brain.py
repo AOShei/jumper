@@ -87,7 +87,7 @@ INTENTS = ("charge", "brace", "dodge", "back_off", "circle", "counter", "wedge",
 #:   boxer    -- the claw mode: circles and swings the arm (`strike`), shoves when
 #:               the foe commits
 STYLES = {
-    "bull": {"aggression": 0.9, "mode": "", "extra": {"dash": 0.8}},     # (the dash only where the bundle has it)
+    "bull": {"aggression": 0.9, "mode": "", "extra": {"dash": 1.6}},     # (the dash only where the bundle has it; at 0.8 it was rolled once in three rounds, dash3.mp4)
     "matador": {"aggression": 0.2, "mode": "", "extra": {"counter": 0.7}},
     "wrestler": {"aggression": 0.6, "mode": "", "extra": {"wedge": 0.6}},
     "boxer": {"aggression": 0.5, "mode": "claw_left", "extra": {"strike": 0.5}},
@@ -496,6 +496,7 @@ def make_pilot(env, player, side):
                     return GamepadState(rx=rx)
                 if DASH_M[0] <= rng_m <= DASH_M[1] and fsm.mode == "locomotion" and fsm.running_policy:
                     st["stage"], st["pushed"], st["rng0"] = "hop", t, rng_m
+                    st["z0"] = st["z_max"] = float(me.data.root_link_pos_w[0, 2])
                     log(t, f"dashes at the foe ({rng_m:.2f} m off)")
                     return GamepadState(buttons=side.presses["dash"].buttons)
                 if rng_m > DASH_M[1]:
@@ -506,13 +507,15 @@ def make_pilot(env, player, side):
                 return GamepadState(ly=+0.5 * WALK, rx=facing(bearing))      # a step back for room
             if st["stage"] == "hop":
                 u = t - st["pushed"]
+                st["z_max"] = max(st["z_max"], float(me.data.root_link_pos_w[0, 2]))
                 if u < PRESS_S:
                     return GamepadState(buttons=side.presses["dash"].buttons)
                 if fsm.mode == "dash" or u < 1.0:
                     return GamepadState()                                   # in the air: the clip drives
                 if u < DASH_WAIT_S and not (fsm.mode == "locomotion" and fsm.running_policy):
                     return GamepadState()
-                decide(t, near, f"after the dash: {st['rng0']:.2f} -> {rng_m:.2f} m to the foe")
+                decide(t, near, f"after the dash: {st['rng0']:.2f} -> {rng_m:.2f} m to the foe, "
+                                f"the base {100 * (st['z_max'] - st['z0']):.0f} cm up at most")
                 return None
         if intent == "strike":
             # The boxer's move: circle the foe with the arm swinging whenever it is in reach.

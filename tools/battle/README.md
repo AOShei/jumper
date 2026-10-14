@@ -165,9 +165,20 @@ The **dash** is `jumper.dash`, the high jump's own recording carried 0.47 m
 forward (`make_dash.py`, `DASH_M`): the base's x ramps through the push, holds
 0.72 m/s over the 0.42 s flight and stops through the absorb, the airborne
 feet move with the body and the planted feet stay, the joint angles are the
-jump's. It trains by resuming the jump's policy. The bull's `dash` intent faces
-the foe and presses L3 when the foe is `BRAIN_DASH_MIN_M` to `BRAIN_DASH_MAX_M`
-off, then waits `BRAIN_DASH_WAIT_S` for the clip to hand back. `jumper.sprint`
+jump's. It trains by resuming the jump's policy, and the jump's reward weights
+were not enough: with them the hop gained 0.10 m a time in the duel, because
+the joint and foot terms score the jump's shape standing still as well as
+moving, and only the velocity term asks for the travel. `jumper.dash` owns
+three numbers of its own (the velocity term at weight 6 and sigma_sq 0.08,
+joint tracking at 1.5; `tasks/jumper/dash/env_cfg.py`), and retrained with them
+for 2000 iterations (2048 environments, 1.1 s an iteration on the RTX 3060) its
+training `travel` metric went from 0.20 to 0.39 m and the hop in the duel
+(`BRAIN_RED_ONLY=dash` against `pilots/park.py`, `out/battle/dash4.mp4`) gains
+0.21-0.26 m a press with the base 12-13 cm up at its apex, the jump's own 14:
+from 0.55 m it lands at 0.38, which is where the front feet meet. The bull's
+`dash` intent faces the foe and presses L3 when the foe is `BRAIN_DASH_MIN_M`
+to `BRAIN_DASH_MAX_M` off, then waits `BRAIN_DASH_WAIT_S` for the clip to hand
+back, and logs the range before and after and the apex. `jumper.sprint`
 is the posture walk retrained with a 1.2 m/s ceiling and a longer stride, the
 pad's B from `locomotion`; `BRAIN_RED_MODE=sprint` fights the whole round in
 it.

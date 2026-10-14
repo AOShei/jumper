@@ -1,6 +1,6 @@
 # Deployment bundle: jumper.dash
 
-Source checkpoint: `/home/andrew/Documents/jumper-battle/logs/jumper/jumper.dash/2026-10-14_18-13-39/model_4599.pt`
+Source checkpoint: `/home/andrew/Documents/jumper/logs/jumper/jumper.dash/2026-10-14_20-53-48/model_6598.pt`
 
 Generated from a live environment by `scripts/export.py`.
 **Do not edit by hand** -- re-export whenever the config changes; values
