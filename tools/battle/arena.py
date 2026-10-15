@@ -168,10 +168,10 @@ def _tof_for_blue(env_cfg: Any, senses: bool) -> bool:
     return True
 
 
-def _decorate(spec: Any, dressed: bool = True) -> None:
-    """The scene's last edit: the crabs made to collide, the plank, and the dressing."""
-    import mujoco
-
+def cross_collide(spec: Any) -> None:
+    """Every collision geom of one crab meets every geom of the other (the module
+    docstring's first point); nothing within a crab changes. Shared with the race
+    (`tools/race/room.py`), which builds a different world round the same two crabs."""
     for geom in spec.geoms:
         name = geom.name or ""
         for crab, bit in CROSS_BITS.items():
@@ -179,6 +179,13 @@ def _decorate(spec: Any, dressed: bool = True) -> None:
                 other = next(b for c, b in CROSS_BITS.items() if c != crab)
                 geom.contype |= bit
                 geom.conaffinity |= other
+
+
+def _decorate(spec: Any, dressed: bool = True) -> None:
+    """The scene's last edit: the crabs made to collide, the plank, and the dressing."""
+    import mujoco
+
+    cross_collide(spec)
     box = mujoco.mjtGeom.mjGEOM_BOX
     leg_h = (PLANK_TOP - PLANK_THICK) / 2
     if ARENA == "disc":

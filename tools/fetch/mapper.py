@@ -60,6 +60,10 @@ class Mapper:
         self.stalled = False                                 # the scan still for STALL_S while walking: no reckoning
         self._carry = [0.0, 0.0]                             # a fix's shift not yet applied to the grid, m
         self.path = []                                       # the last plan, world xy
+        self.inflate_m = INFLATE                             # the planner's clearance; a smaller room asks for less
+        self.model = None                                    # (ly, lx) -> (v forward, v left) m/s, in place of the
+                                                             # stick model below, for a mode measured differently
+        self.match_win = MATCH_WIN                           # the scan match's search, m each way
 
     # -- frames -------------------------------------------------------------------
     def cell(self, wx, wy):
@@ -90,6 +94,20 @@ class Mapper:
             self.marks[name] = (float(x), float(y))
             self.fixed.add(name)
 
+    def known(self, segments, thick=0.0):
+        """Walls the robot was given before it looked: each segment ((x0, y0), (x1, y1))
+        in the wake frame is set occupied at the clamp, so the scan match has something
+        to hold the pose against from the first frame. The race's kerb is the case
+        (tools/race, 2026-10-15): with nothing known the dead-reckoned pose was 0.2-0.4 m
+        off within 10 s and the things it remembered doubled up; the kerb is always in
+        view and does not move, which is what a landmark is."""
+        for (x0, y0), (x1, y1) in segments:
+            n = max(2, int(math.hypot(x1 - x0, y1 - y0) / (RES * 0.5)))
+            for x, y in zip(np.linspace(x0, x1, n), np.linspace(y0, y1, n)):
+                r, c = self.cell(float(x), float(y))
+                k = int(math.ceil(thick / RES))
+                self.grid[max(0, r - k): min(N, r + k + 1), max(0, c - k): min(N, c + k + 1)] = CLAMP
+
     def fix(self, name, bx, by, gain=0.5, max_m=1.5):
         """A landmark fix: the mark `name` seen at (bx, by) in the body frame. The pose
         moves by `gain` of the discrepancy, and the grid moves with it, so what was
@@ -102,10 +120,17 @@ class Mapper:
         d = math.hypot(dx, dy)
         if d > max_m:
             return None
-        self.x += gain * dx
-        self.y += gain * dy
-        self._carry[0] += gain * dx
-        self._carry[1] += gain * dy
+        self.shift(gain * dx, gain * dy)
+        return d
+
+    def shift(self, dx: float, dy: float) -> None:
+        """Move the pose by (dx, dy) and the grid with it, so what was mapped from the
+        drifted pose keeps its place against the body (a fix's second half, on its own
+        for a fix that is not a mark's: the race's known walls, `tools/race`)."""
+        self.x += dx
+        self.y += dy
+        self._carry[0] += dx
+        self._carry[1] += dy
         # the grid shifts by whole cells; the remainder waits for the next fix
         sc, sr = int(round(self._carry[0] / RES)), int(round(self._carry[1] / RES))
         if sc or sr:
@@ -121,7 +146,6 @@ class Mapper:
             self._carry[0] -= sc * RES
             self._carry[1] -= sr * RES
             self.path = [(x + sc * RES, y + sr * RES) for x, y in self.path]
-        return d
 
     def step(self, senses, t, ly, lx, scale=1.0):
         """Once per control step. `ly`/`lx` are the pad's sticks (ly < 0 walks forward,
@@ -130,8 +154,11 @@ class Mapper:
         matches the scan to the map and folds the frame in."""
         if self.last_t is not None:
             dt = t - self.last_t
-            v = -SPEED_FWD * scale * ly if abs(ly) >= DEAD_BAND else 0.0
-            vy = -SPEED_SIDE * scale * lx if abs(lx) >= DEAD_BAND else 0.0
+            if self.model is not None:
+                v, vy = self.model(ly, lx)
+            else:
+                v = -SPEED_FWD * scale * ly if abs(ly) >= DEAD_BAND else 0.0
+                vy = -SPEED_SIDE * scale * lx if abs(lx) >= DEAD_BAND else 0.0
             if self.stalled:
                 v = vy = 0.0                                 # (wedged: the stick moves nothing)
             cy, sy = math.cos(self.yaw), math.sin(self.yaw)
@@ -182,8 +209,8 @@ class Mapper:
             ox, oy = self.to_world(pts[obj])
             best, best_s = (0.0, 0.0), -1
             base = None
-            for dx in np.arange(-MATCH_WIN, MATCH_WIN + 1e-6, MATCH_STEP):
-                for dy in np.arange(-MATCH_WIN, MATCH_WIN + 1e-6, MATCH_STEP):
+            for dx in np.arange(-self.match_win, self.match_win + 1e-6, MATCH_STEP):
+                for dy in np.arange(-self.match_win, self.match_win + 1e-6, MATCH_STEP):
                     rr = np.clip(np.round((oy + dy) / RES).astype(int) + N // 2, 0, N - 1)
                     cc = np.clip(np.round((ox + dx) / RES).astype(int) + N // 2, 0, N - 1)
                     sc = int((self.grid[rr, cc] > OCC).sum())
@@ -257,9 +284,9 @@ class Mapper:
                 if rs.stop > rs.start and cs.stop > cs.start:
                     sub = occ[rs, cs]
                     sub[d[k - (r0 - rs.start): k + (rs.stop - r0), k - (c0 - cs.start): k + (cs.stop - c0)]] = False
-        k = int(math.ceil(INFLATE / RES))
+        k = int(math.ceil(self.inflate_m / RES))
         yy, xx = np.ogrid[-k:k + 1, -k:k + 1]
-        disk = (xx * xx + yy * yy) * RES * RES <= INFLATE * INFLATE
+        disk = (xx * xx + yy * yy) * RES * RES <= self.inflate_m * self.inflate_m
         return ndimage.binary_dilation(occ, structure=disk)
 
     def clearance(self, heading_b, length, half_width=0.25):
