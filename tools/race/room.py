@@ -61,11 +61,16 @@ KERB_H, KERB_T = 0.35, 0.05                               # the wall round the r
                                                           # (at 10 cm it was a two-zone sliver at range, told from a cube
                                                           # by width alone, and the crabs "lost the walls", Andrew 2026-10-15)
 GLASS = 0.22                                              # the camera-side wall's alpha: at 0.35 m it would hide 0.4 m of floor
+CHAMFER = float(os.environ.get("RACE_CHAMFER", "0.45"))   # each corner cut off by a wall at 45 degrees this long (along each
+                                                          # side): a thing in a square corner has two free faces and both
+                                                          # shove it into a wall -- no crab wider than the gap can get behind
+                                                          # it -- on the diagonal it is pushed along the diagonal and out
+                                                          # (Andrew, 2026-10-15: "the crabs fail when an object is in a corner")
 LINE_W = 0.05                                             # the painted line's width
 START_X = float(os.environ.get("RACE_START_X", str(ROOM_X / 2 - 0.45)))   # each crab's mark, out from the line
 N_PER_SIDE = int(os.environ.get("RACE_OBJECTS", "6"))     # objects on each half at the start
 OBJECT_MARGIN = 0.40                                      # m: objects keep this far from the kerb...
-OBJECT_GAP = 0.40                                         # ...and from each other
+OBJECT_GAP = 0.45                                         # ...and from each other
 START_CLEAR = 0.55                                        # ...and from a crab's mark (its stance is ~0.45 m across)
 LINE_CLEAR = 0.25                                         # ...and from the line (an object ON the line is nobody's)
 
@@ -75,11 +80,13 @@ LINE_CLEAR = 0.25                                         # ...and from the line
 #: A third larger than the first set (cube 9, ball 10, can 6.6 x 11, puck 12 x 5 cm), which read
 #: small on camera (Andrew, 2026-10-15: "the objects to be a little larger"); still under
 #: `sight.OBJECT_HEIGHT`'s 16 cm and the kerb's 12.5 cm except the can, which is a thing by its width.
+#: ...and larger again on 2026-10-15 (cube 12, ball 14, can 9 x 14, puck 16 x 6 cm before): against
+#: the kerb an object has to stand proud of it by more than `sight.PROUD_M` to be seen.
 KINDS = {
-    "cube": {"type": "box", "size": (0.06, 0.06, 0.06), "mass": 0.2, "half_z": 0.06},
-    "ball": {"type": "sphere", "size": (0.07, 0.0, 0.0), "mass": 0.08, "half_z": 0.07},
-    "can": {"type": "cylinder", "size": (0.045, 0.07, 0.0), "mass": 0.15, "half_z": 0.07},
-    "puck": {"type": "cylinder", "size": (0.08, 0.03, 0.0), "mass": 0.15, "half_z": 0.03},   # at 3 cm tall the crab walked over the first puck (probe1)
+    "cube": {"type": "box", "size": (0.075, 0.075, 0.075), "mass": 0.25, "half_z": 0.075},
+    "ball": {"type": "sphere", "size": (0.085, 0.0, 0.0), "mass": 0.1, "half_z": 0.085},
+    "can": {"type": "cylinder", "size": (0.055, 0.085, 0.0), "mass": 0.2, "half_z": 0.085},
+    "puck": {"type": "cylinder", "size": (0.095, 0.035, 0.0), "mass": 0.2, "half_z": 0.035},
 }
 #: Which kinds, in what order, on each half; the layout cycles through it.
 MIX = os.environ.get("RACE_MIX", "cube,ball,can,puck,ball,cube").split(",")
@@ -115,9 +122,18 @@ POST = (0.95, 0.95, 0.95, 1.0)
 
 def layout(seed: int, n: int = N_PER_SIDE) -> list[dict]:
     """The objects, mirrored through the line: `n` on the blue half (x < 0) and the
-    same `n` reflected onto the red half. Each is {name, kind, x, y, rgba}."""
+    same `n` reflected onto the red half. Each is {name, kind, x, y, rgba}.
+    `RACE_LAYOUT="cube:-1.8:0.3;ball:0.5:-0.2"` stages exactly these instead (a probe)."""
     import numpy as np
 
+    staged = os.environ.get("RACE_LAYOUT")
+    if staged:
+        out = []
+        for i, item in enumerate(staged.split(";")):
+            kind, x, y = item.split(":")
+            out.append({"name": f"obj_{kind}_{i}", "kind": kind, "x": float(x), "y": float(y),
+                        "rgba": PALETTE[kind][i % len(PALETTE[kind])]})
+        return out
     rng = np.random.default_rng(seed)
     placed: list[tuple[float, float]] = []
     out = []
@@ -127,7 +143,7 @@ def layout(seed: int, n: int = N_PER_SIDE) -> list[dict]:
         kind = MIX[i % len(MIX)]
         for _ in range(2000):
             x, y = float(rng.uniform(lo_x, hi_x)), float(rng.uniform(-hi_y, hi_y))
-            if math.hypot(x - START_X, y) < START_CLEAR:
+            if math.hypot(x - START_X, y) < START_CLEAR or not free(x, y, OBJECT_MARGIN * 0.6):
                 continue
             if all(math.hypot(x - px, y - py) >= OBJECT_GAP for px, py in placed):
                 break
@@ -154,6 +170,14 @@ def _object_spec(kind: str, rgba: tuple) -> Any:
     O._prop_geom(body, name=f"{kind}_geom", type=gtype, size=list(k["size"]), pos=[0.0, 0.0, 0.0],
                  rgba=list(rgba), mass=k["mass"], **extra)
     return spec
+
+
+def free(x: float, y: float, margin: float = 0.0) -> bool:
+    """Whether a point is on the rink floor `margin` clear of every wall, chamfers included."""
+    hx, hy = ROOM_X / 2 - margin, ROOM_Y / 2 - margin
+    if abs(x) > hx or abs(y) > hy:
+        return False
+    return (ROOM_X / 2 - abs(x)) + (ROOM_Y / 2 - abs(y)) > CHAMFER + margin * math.sqrt(2)
 
 
 def side_of(x: float) -> str | None:
@@ -216,6 +240,17 @@ def decorate(spec: Any) -> None:
         rgba = list(KERB[:3]) + [GLASS if i == 1 else 1.0]
         spec.worldbody.add_geom(name=f"kerb{i}", type=box, size=list(size), pos=list(pos), rgba=rgba,
                                 contype=1, conaffinity=1, group=2, mass=0.0)
+    # the chamfers: a wall across each corner, from (hx - C, hy) to (hx, hy - C)
+    c = CHAMFER
+    for i, (sx, sy) in enumerate(((1, 1), (-1, 1), (-1, -1), (1, -1))):
+        cx, cy = sx * (ROOM_X / 2 - c / 2), sy * (ROOM_Y / 2 - c / 2)
+        ang = math.atan2(-sx * 1.0, sy * 1.0)                  # along the cut: perpendicular to the corner's diagonal
+        quat = [math.cos(ang / 2), 0.0, 0.0, math.sin(ang / 2)]
+        rgba = list(KERB[:3]) + [GLASS if sy < 0 else 1.0]
+        # a touch shorter than the cut, so its ends do not lie inside the kerb boxes (two faces in one
+        # place flicker as a hatched patch, still4)
+        spec.worldbody.add_geom(name=f"chamfer{i}", type=box, size=[c / math.sqrt(2) - KERB_T * 0.7, KERB_T / 2, hz],
+                                pos=[cx, cy, hz], quat=quat, rgba=rgba, contype=1, conaffinity=1, group=2, mass=0.0)
     _set(spec)
     for light in spec.lights:
         if light.castshadow:

@@ -27,7 +27,7 @@ import numpy as np
 from arena import BLUE, RED
 from mapper import Mapper
 from moves import MOVES, WALKING, Performer
-from room import ROOM_X, ROOM_Y, side_of
+from room import CHAMFER, ROOM_X, ROOM_Y, free, side_of
 from sight import Sight, is_crab
 
 from controller import GamepadState
@@ -44,10 +44,10 @@ FACE_DEG = 30.0                                            # lined up when the h
                                                            # lateral stick takes up the rest)
 TURN_FULL = 1.0                                            # the turn stick when far off the heading (0.62 is 33 deg/s)
 ORBIT_IN_M = 1.0                                           # nearer the object than this, the walk becomes the orbit
-ORBIT_DEG = 45.0                                           # in position when within this of straight behind it (25 had
-                                                           # the crabs circling for the whole race: four shoves, day10; a
-                                                           # shove from 45 degrees still moves the thing toward my half)
-ORBIT_S = 6.0                                              # circling this long, shove from wherever I am
+ORBIT_DEG = 30.0                                           # in position when within this of the shove's heading (25 had
+                                                           # the crabs circling for the whole race: four shoves, day10; 45
+                                                           # shoved things along the walls as often as over the line)
+ORBIT_S = 10.0                                             # circling this long, shove from wherever I am
 STRAFE = 0.9                                               # the orbit's stick along the circle
 OVER_M = float(os.environ.get("SWEEP_OVER_M", "0.30"))     # the object is done this far past the line
 BACK_S = 0.7                                               # seconds of reverse after a shove, and only after a shove or
@@ -55,13 +55,31 @@ BACK_S = 0.7                                               # seconds of reverse 
                                                            # object and then back up first instead of just going for it")
 STALL_S = 2.5                                              # a shove that moves nothing this long is abandoned
 TRY_S = 30.0                                               # a job that takes this long is abandoned
-KERB_CLEAR = 0.30                                          # goals stay this far from the kerb
+KERB_CLEAR = 0.24                                          # the body stands this far from the kerb at least (0.45 m wide)
+CORNER_M = 0.5                                             # a kerb point within this of a corner is left out of the wall fix
+                                                           # (the chamfer's points belong to neither wall)
+LINE_WEIGHT = 0.6                                          # m of walk a thing costs per metre it stands from the line, when
+                                                           # picking: the near ones first, the far corners last
+CLAW = os.environ.get("SWEEP_CLAW", "0") == "1"            # shove in the claw mode with the arm out (Andrew: "a walking gait
+                                                           # with claws extended"): measured (probe_armpush, 2026-10-15), a
+                                                           # cube slides 41 cm in 1.5 s at a 0.8 stick without tipping, a ball
+                                                           # and a can roll ahead, the thing stays in the picture as a thing
+                                                           # with the kerb beside it. OFF by default: in a race the switch
+                                                           # into the mode is a ramp the controller ends only at the home
+                                                           # pose, which lifts the arm's leg, and against a thing it never
+                                                           # gets there -- the crabs spent the race "ramping" (day15/16: 4
+                                                           # and 10 crossings against 62 with the shell)
+CLAW_FWD_PER, CLAW_SIDE_PER = 0.42, 0.35                   # the claw gait's m/s per unit of stick (tools/fetch/mapper.py)
+CLAW_WAIT_S = 2.5                                          # the longest wait for the mode to come up before shoving anyway
 FACE_S = 6.0                                               # the longest turn to the camera before the dance
 LOOKOUT_X = 0.9                                            # the search: this far into the other half, on the line's axis...
 SCAN_S = 12.0                                              # ...then a turn on the spot this long (33 deg/s: a full circle)
-APPROACH_DEG = (0.0, 35.0, -35.0, 60.0, -60.0, 80.0, -80.0)   # where to stand round an object, tried in this order:
-                                                           # straight behind, else slanting, else nearly beside it (a
-                                                           # thing against the far kerb has no "behind" inside the room)
+APPROACH_DEG = (0.0, 30.0, 55.0, 75.0)                   # where to stand round an object: straight behind, else slanting,
+                                                           # else nearly beside it, each slant tried toward the room's middle
+                                                           # first; every shove keeps a component toward the line, and a
+                                                           # thing against the far kerb is peeled off it a slant at a time
+                                                           # (Andrew: "take a little more time to ensure they are pushing
+                                                           # objects in the correct direction")
 #: The map's dead reckoning, measured in this room (probe_speed, 2026-10-15, seed 5, an empty
 #: rink, the 2 s past each phase's first second): forward 0.56 m/s at a 0.75 stick and 0.7 at
 #: 0.9 (the loop's readout), 0.13 at 0.5; strafe 0.36, 0.40, 0.59 and 0.70 m/s at 0.5, 0.6,
@@ -97,6 +115,10 @@ def stick_model(ly: float, lx: float) -> tuple[float, float]:
     v = -math.copysign(FWD_PER * max(0.0, abs(ly) - STICK_BAND), ly) if ly else 0.0
     vy = -math.copysign(SIDE_PER * max(0.0, abs(lx) - SIDE_BAND), lx) if lx else 0.0
     return v, vy
+
+
+def claw_model(ly: float, lx: float) -> tuple[float, float]:
+    return -CLAW_FWD_PER * ly, -CLAW_SIDE_PER * lx
 MATCH_M = 0.30                                             # a sighting within this of a remembered thing is that thing
 FORGET_S = 1.0                                             # a remembered thing in plain view and not seen this long is gone
                                                            # (2 s had the crabs walking at ghosts of things long shoved,
@@ -169,12 +191,16 @@ class Senses:
         self.mapper.inflate_m = INFLATE_M
         self.mapper.model = stick_model
         self.mapper.match_win = MATCH_WIN_M
-        hx, hy = ROOM_X / 2, ROOM_Y / 2                   # the kerb: the room the crab was put in, known
-        self.mapper.known([((-hx, -hy), (hx, -hy)), ((-hx, hy), (hx, hy)), ((-hx, -hy), (-hx, hy)), ((hx, -hy), (hx, hy))])
+        hx, hy, c = ROOM_X / 2, ROOM_Y / 2, CHAMFER       # the kerb: the room the crab was put in, known
+        self.mapper.known([((-hx + c, -hy), (hx - c, -hy)), ((-hx + c, hy), (hx - c, hy)),
+                           ((-hx, -hy + c), (-hx, hy - c)), ((hx, -hy + c), (hx, hy - c))]
+                          + [((sx * (hx - c), sy * hy), (sx * hx, sy * (hy - c))) for sx in (-1, 1) for sy in (-1, 1)])
         self.things: dict[str, dict] = {}
         self._n = 0
         self.truth = env.scene[side.me]
         self.last_fix = 0.0
+        self.mode_fn = None                                # () -> (the controller's mode, running), set by the pilot
+        self.sight.at_wall = self.at_wall
         self.blocked = False                               # the other crab right ahead this frame
         self.fixes = [0, 0, 0, 0]                          # fixes landed per wall (+x, -x, +y, -y), for the log
         self.kerb_frames = 0                               # frames with kerb points at all
@@ -191,12 +217,16 @@ class Senses:
         self.kerb_frames += 1
         t = self.sight.last["t"]
         pts = self.sight.last["pts"][idx]
+        pts = pts[pts[:, 0] > 0.25]                        # not what is under the nose: a thing cut by the picture's top
+        if len(pts) < WALL_MIN_PTS:
+            return
         wx, wy = self.mapper.to_world(pts)
         hx, hy = ROOM_X / 2, ROOM_Y / 2
         dists = np.stack([np.abs(wx - hx), np.abs(wx + hx), np.abs(wy - hy), np.abs(wy + hy)], axis=1)
         wall = dists.argmin(axis=1)
         near_m = min(WALL_NEAR_MAX, WALL_NEAR_M + WALL_GROW_M_S * (t - self.last_fix))
-        near = dists[np.arange(len(wall)), wall] < near_m
+        in_corner = (np.abs(wx) > hx - CORNER_M) & (np.abs(wy) > hy - CORNER_M)
+        near = (dists[np.arange(len(wall)), wall] < near_m) & ~in_corner
         dx_terms, dy_terms = [], []
         for w, (coord, along, target) in enumerate(((wx, wy, hx), (wx, wy, -hx), (wy, wx, hy), (wy, wx, -hy))):
             sel = near & (wall == w)
@@ -219,6 +249,15 @@ class Senses:
                 self.last_fix = t
             self.mapper.shift(clip(dx), clip(dy))
 
+    def at_wall(self, bx: float, by: float, within: float = 0.12) -> bool:
+        """Whether a point in the base frame lies on a known wall, by the map's pose."""
+        wx, wy = self.mapper.to_world(np.array([[bx, by]]))
+        wx, wy = float(wx[0]), float(wy[0])
+        hx, hy = ROOM_X / 2, ROOM_Y / 2
+        if min(abs(abs(wx) - hx), abs(abs(wy) - hy)) < within:
+            return True
+        return abs((hx - abs(wx)) + (hy - abs(wy)) - CHAMFER) < within * math.sqrt(2)
+
     def foe_ahead(self):
         """The other crab's cluster, if one is right ahead (the blocked shove)."""
         if self.sight.last is None:
@@ -232,6 +271,10 @@ class Senses:
         fresh = self.sight.update(t)
         ly = float(frame.ly) if frame is not None else 0.0
         lx = float(frame.lx) if frame is not None else 0.0
+        mode, running = self.mode_fn() if self.mode_fn is not None else ("locomotion", True)
+        if not running:
+            ly = lx = 0.0                                      # ramping between modes, the sticks move nothing
+        self.mapper.model = claw_model if mode.startswith("claw") else stick_model
         if fresh:
             self.blocked = self.foe_ahead() is not None
             crabs = [c for c in self.sight.last["big"] if is_crab(c)]
@@ -317,10 +360,13 @@ def make_pilot(env, player, side):
     performer = Performer(player, side.presses, label=label)
     moves = MOVES[side.name]
     eyes = Truth(env, side) if side.truth else Senses(env, side)
+    claw_press = side.presses.get("claw_left") if CLAW else None
+    if not side.truth:
+        eyes.mode_fn = lambda: (player.fsm.mode, player.fsm.running_policy)
     st = {"intent": None, "stage": "", "target": None, "target_w": None, "since": 0.0, "cue_id": referee.cue_id,
           "face": None, "line_w": ((0.0, -ROOM_Y / 2), (0.0, ROOM_Y / 2)), "last_xy": None, "still_since": None,
           "job_since": 0.0, "shoved": [], "abandoned": {}, "push_yaw": push_yaw, "frame": None, "truth_log": 0.0,
-          "plan_t": -1e9, "waypoint": None}
+          "plan_t": -1e9, "waypoint": None, "claw_since": None, "claw_pressed": None}
 
     def log(t, msg):
         print(f"\n[{label}] {t:6.2f}s  {msg}")
@@ -328,6 +374,21 @@ def make_pilot(env, player, side):
     def walking() -> bool:
         fsm = player.fsm
         return fsm.mode in WALKING and fsm.running_policy
+
+    def claw_toggle(t):
+        """The chord that toggles the claw mode, held PRESS_S; None once it has been sent."""
+        if st["claw_pressed"] is None:
+            st["claw_pressed"] = t
+        if t - st["claw_pressed"] < 0.3:
+            return GamepadState(buttons=claw_press.buttons, hat_x=claw_press.hat_x, hat_y=claw_press.hat_y)
+        return None
+
+    def arm(frame):
+        """The shove's frame with the arm held out (web up) in the claw mode, once it runs."""
+        if claw_press is None or player.fsm.mode != "claw_left" or not player.fsm.running_policy:
+            return frame
+        return GamepadState(lx=frame.lx, ly=frame.ly, rx=frame.rx, ry=frame.ry, lt=frame.lt, rt=frame.rt,
+                            buttons=frame.buttons, hat_x=-1, hat_y=0)
 
     def head_to(x, y, yaw, gx, gy, stick=WALK):
         """The sticks that walk toward (gx, gy): turn to face it, walk once facing."""
@@ -351,9 +412,14 @@ def make_pilot(env, player, side):
         # ...unless that way round runs into the kerb: then the long way (strafing into the
         # wall, the crab stood still while the map walked on: 1.6 m of y in 5 s, day9)
         rx_w = (math.sin(yaw), -math.cos(yaw))                 # my right, in the world
-        ahead_x, ahead_y = x + math.copysign(0.35, lx) * rx_w[0], y + math.copysign(0.35, lx) * rx_w[1]
-        if abs(ahead_x) > ROOM_X / 2 - KERB_CLEAR or abs(ahead_y) > ROOM_Y / 2 - KERB_CLEAR:
+        if st.get("orbit_way") is not None:
+            lx = math.copysign(abs(lx) if abs(e) > math.radians(ORBIT_DEG) else 0.0, st["orbit_way"])
+        ahead_x, ahead_y = x + math.copysign(0.35, lx or 1.0) * rx_w[0], y + math.copysign(0.35, lx or 1.0) * rx_w[1]
+        if lx and not free(ahead_x, ahead_y, KERB_CLEAR):
+            # that way round runs into the kerb: the long way, and KEEP going that way (flipping
+            # each frame between two blocked ways is a crab jiggling on the spot, day14)
             lx = -math.copysign(STRAFE, lx)
+            st["orbit_way"] = math.copysign(1.0, lx)
         ly = -max(-0.8, min(0.8, 2.5 * (r - BEHIND_M)))        # ahead to close, back to open
         rx = -max(-TURN_FULL, min(TURN_FULL, 2.5 * bearing))
         there = abs(e) < math.radians(ORBIT_DEG) and abs(r - BEHIND_M) < 0.25 and abs(bearing) < math.radians(FACE_DEG)
@@ -403,7 +469,7 @@ def make_pilot(env, player, side):
             return
         # nearest first, by the walk to its approach point; a thing seen lately over one remembered
         best = min(todo, key=lambda o: math.hypot(o["x"] - sign * -BEHIND_M - x, o["y"] - y)
-                   + STALE_WEIGHT * (t - o.get("seen", t)))
+                   + STALE_WEIGHT * (t - o.get("seen", t)) + LINE_WEIGHT * abs(o["x"]))
         st["target"], st["target_w"] = best, (best["x"], best["y"])
         st["intent"], st["stage"], st["since"], st["job_since"] = "approach", f"to the {best['kind']}", t, t
         st["still_since"] = None
@@ -411,13 +477,17 @@ def make_pilot(env, player, side):
 
     def approach_point(o):
         """Where to stand to shove `o` toward my half -- the angle round it, the point,
-        and the heading of the shove: straight behind it when that is inside the
-        room, else round the side."""
+        and the heading of the shove. Straight behind it when the body fits there,
+        else slanting, toward the room's middle first, so a thing against a wall or
+        on a chamfer is peeled off it with every shove still carrying it toward the
+        line; the last resort is the nearest standing room to straight behind."""
         for deg in APPROACH_DEG:
-            a = push_yaw + math.pi + math.radians(deg)
-            gx, gy = o["x"] + BEHIND_M * math.cos(a), o["y"] + BEHIND_M * math.sin(a)
-            if abs(gx) <= ROOM_X / 2 - KERB_CLEAR and abs(gy) <= ROOM_Y / 2 - KERB_CLEAR:
-                return a, gx, gy, _wrap(a + math.pi)
+            signs = (1.0,) if deg == 0.0 else ((-1.0, 1.0) if o["y"] > 0 else (1.0, -1.0))
+            for sg in signs:
+                a = push_yaw + math.pi + sg * math.radians(deg)
+                gx, gy = o["x"] + BEHIND_M * math.cos(a), o["y"] + BEHIND_M * math.sin(a)
+                if free(gx, gy, KERB_CLEAR):
+                    return a, gx, gy, _wrap(a + math.pi)
         gx, gy = inside(o["x"] - sign * BEHIND_M, o["y"])
         return push_yaw + math.pi, gx, gy, push_yaw
 
@@ -428,8 +498,8 @@ def make_pilot(env, player, side):
         if o is not None:
             st["abandoned"][o["name"]] = t
         log(t, f"gives up the {o['kind'] if o else '?'}: {why}")
-        if stuck:
-            st["intent"], st["stage"], st["since"] = "back_off", why, t
+        if stuck or (claw_press is not None and player.fsm.mode == "claw_left"):
+            st["intent"], st["stage"], st["since"], st["claw_pressed"] = "back_off", why, t, None
         else:
             st["intent"], st["stage"] = None, ""
 
@@ -482,16 +552,24 @@ def make_pilot(env, player, side):
                 return head_to(x, y, yaw, wx_, wy_)
             # near: circle it to the far side, nose on it, and shove the moment I am there
             if st["stage"] != f"round the {o['kind']}":
-                st["stage"], st["orbit_since"] = f"round the {o['kind']}", t
+                st["stage"], st["orbit_since"], st["orbit_way"] = f"round the {o['kind']}", t, None
             if mapper is not None:
                 mapper.path = []
             frame, there, facing = orbit(x, y, yaw, o, theta_goal)
             if there or (facing and t - st["orbit_since"] > ORBIT_S):
                 st["intent"], st["stage"], st["since"] = "push", f"shoving the {o['kind']}", t
-                st["last_xy"], st["still_since"] = (o["x"], o["y"]), None
+                st["last_xy"], st["still_since"], st["claw_pressed"] = (o["x"], o["y"]), None, None
                 return None
             return frame
         if intent == "push":
+            fsm = player.fsm
+            if claw_press is not None and fsm.mode != "claw_left" and t - st["since"] < CLAW_WAIT_S:
+                # into the claw mode first, the arm out: the shove is the claw's
+                chord = claw_toggle(t)
+                return chord if chord is not None else None
+            if claw_press is not None and fsm.mode == "claw_left" and not fsm.running_policy:
+                return None                                  # hands off through the ramp: a preset held then keeps the
+                                                             # home pose from being reached, and the ramp never ends (day15)
             # the object in the body frame: ahead (bx) and across (by, +left)
             dx, dy = o["x"] - x, o["y"] - y
             bx = math.cos(yaw) * dx + math.sin(yaw) * dy
@@ -537,11 +615,19 @@ def make_pilot(env, player, side):
             st["last_xy"] = (o["x"], o["y"])
             rx = -max(-TURN, min(TURN, TURN_GAIN * err))
             lx = -max(-0.6, min(0.6, 2.5 * by))
-            return GamepadState(ly=-PUSH, lx=lx, rx=rx)
+            return arm(GamepadState(ly=-PUSH, lx=lx, rx=rx))
         if intent == "back_off":
             if t - st["since"] < BACK_S:
-                return GamepadState(ly=0.6)
-            st["intent"] = None
+                return arm(GamepadState(ly=0.6))
+            if claw_press is not None and player.fsm.mode == "claw_left":
+                if st["claw_pressed"] is None or t - st["claw_pressed"] > 0.3:
+                    st["claw_pressed"] = None
+                chord = claw_toggle(t)
+                if chord is not None:
+                    return chord
+                if t - st["since"] < BACK_S + CLAW_WAIT_S:
+                    return None
+            st["intent"], st["claw_pressed"] = None, None
             return None
         if intent == "search":
             todo = [o for o in eyes.objects() if wrong_side(o) and st["abandoned"].get(o["name"], -1e9) < t - 20.0]

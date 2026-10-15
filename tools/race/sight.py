@@ -29,11 +29,24 @@ TOF_EYE = TOF_ORIGIN + np.array([0.004, 0.0, 0.0])
 FOOT_R = 0.012
 FLOOR_CLEAR = 0.03
 MAX_RANGE = 3.0
-OBJECT_HEIGHT = (0.035, 0.16)     # m above the floor, the cluster's tallest point
+OBJECT_HEIGHT = (0.035, 0.21)     # m above the floor, the cluster's tallest point
 OBJECT_WIDTH = (0.03, 0.26)       # m across (a crab is 0.3-0.5, the kerb is the picture's width)
 CRAB_SKIRT = 0.45                 # m round a crab-sized cluster: the small clusters there are its legs
 CRAB_HEIGHT = (0.12, 0.27)        # a crab's shell is 0.15-0.20 up; the kerb starts where a crab ends
+CRAB_DEPTH = 0.12                 # m front to back in the picture: a crab's legs spread, a thing's face does not
 KERB_MIN = 0.27                   # the kerb is 0.35 m tall: nothing else in the room reaches this
+TOP_CUT_M = (0.2, 0.5)            # between these ranges nothing object-sized reaches the picture's top row: the view's
+                                  # upper edge is 0.137 + 0.384 r m up, 0.21 m at 0.2 m and 0.33 at 0.5, and the
+                                  # tallest thing is 0.21. Nearer than 0.2 a thing is cut too (a 17 cm ball at 10 cm:
+                                  # read as wall, the wall fix pulled the pose 2 m onto it, day17), and only the map
+                                  # can say (`at_wall`)
+NEAR_M = 0.45                     # nearer than this a thing fills the picture's width and touches its edges: the
+                                  # width and edge gates are not asked of it (at 27 cm a 15 cm cube was 1895 zones,
+                                  # edge-cut, and not a thing: the crab went blind on contact, probe_contact)
+PROUD_M = 0.04                    # a low zone this much nearer than the wall in its column is a thing against the
+                                  # wall: the depth-connected labelling joins an object to the kerb behind it
+                                  # through its edges, where the depth runs into the wall's (Andrew, 2026-10-15:
+                                  # "when objects are up against a wall the crabs can't see them")
 
 
 def ray_dirs() -> np.ndarray:
@@ -45,8 +58,12 @@ def ray_dirs() -> np.ndarray:
 
 
 def is_crab(cluster: dict) -> bool:
-    """A cluster the size of the other crab: between the objects and the kerb in height, wide."""
-    return CRAB_HEIGHT[0] < cluster["height"] < CRAB_HEIGHT[1] and cluster["width"] > 0.2
+    """A cluster the size of the other crab: between the objects and the kerb in height,
+    wider than any object, and deep -- its legs spread 0.3 m front to back, where a
+    thing shows only its near face (a row of things against the kerb is wide and low
+    but a few centimetres deep, and read as a crab until this, day12)."""
+    return (CRAB_HEIGHT[0] < cluster["height"] < CRAB_HEIGHT[1] and cluster["width"] > OBJECT_WIDTH[1]
+            and cluster.get("depth", 1.0) > CRAB_DEPTH)
 
 
 def _named(model, objtype, name: str, entity: str) -> int:
@@ -82,6 +99,7 @@ class Sight:
         self.yaw = yaw0                    # gyro-integrated from the heading the crab woke up at
         self.frames = 0
         self.last = None
+        self.at_wall = None                # (x, y in the base frame) -> bool: the map's say on a close, cut cluster
 
     def _pose_self(self) -> None:
         q = self.robot.data.joint_pos_biased[0].cpu().numpy()
@@ -101,6 +119,36 @@ class Sight:
                            self.tof_body, self._geomid, self._dist, None, ROWS * COLS, mujoco.mjMAXVAL)
         hit = (self._geomid >= 0).reshape(ROWS, COLS)
         return ndimage.binary_dilation(hit, iterations=1).ravel()
+
+    @staticmethod
+    def _split_proud(labels: np.ndarray, n: int, pts: np.ndarray, h: np.ndarray):
+        """A thing against the kerb, cut out of the kerb's cluster: in each column of a
+        cluster that reaches kerb height, the wall's depth is the median of its tall
+        zones; the low zones nearer than that by `PROUD_M` are not wall. They become
+        clusters of their own (connected among themselves)."""
+        x = pts[:, 0].reshape(ROWS, COLS)
+        hh = h.reshape(ROWS, COLS)
+        proud = np.zeros((ROWS, COLS), dtype=bool)
+        for k in range(1, n + 1):
+            sel = labels == k
+            if sel.sum() < 15 or hh[sel].max() < KERB_MIN:
+                continue
+            for c in range(COLS):
+                col = sel[:, c]
+                tall = col & (hh[:, c] > CRAB_HEIGHT[1])
+                if tall.sum() < 2:
+                    continue
+                wall_x = float(np.median(x[tall, c]))
+                low = col & (hh[:, c] <= OBJECT_HEIGHT[1]) & (x[:, c] < wall_x - PROUD_M)
+                proud[low, c] = True
+        if not proud.any():
+            return labels, n
+        # connected in depth, not merely adjacent: two cubes side by side against the kerb
+        # came out as one 0.35 m wide low cluster, which read as a crab (day12)
+        sub, m = Sight._label(proud, pts, step=0.05)
+        out = labels.copy()
+        out[proud] = n + sub[proud]
+        return out, n + m
 
     @staticmethod
     def _label(obj: np.ndarray, pts: np.ndarray, step: float = 0.10):
@@ -154,6 +202,7 @@ class Sight:
         frame (x ahead, y left: the nearest face's median), and the ones that are not
         (the other crab, the kerb), which the map still wants as obstacles."""
         labels, n = self._label(obj, pts)
+        labels, n = self._split_proud(labels, n, pts, h)
         things, big, kerb = [], [], []
         thing_px, kerb_px, crab_px = (np.zeros(ROWS * COLS, dtype=bool) for _ in range(3))
         for k in range(1, n + 1):
@@ -163,12 +212,25 @@ class Sight:
             p = pts[sel]
             top, width = float(h[sel].max()), float(np.ptp(p[:, 1]))
             cols_ = np.nonzero(sel.reshape(ROWS, COLS).any(axis=0))[0]
+            rows_ = np.nonzero(sel.reshape(ROWS, COLS).any(axis=1))[0]
             edge = bool(cols_.min() == 0 or cols_.max() == COLS - 1)
+            top_cut = bool(rows_.min() == 0)                 # its top is above the picture: taller than it looks
             near = float(p[:, 0].min())
             cx, cy = float(np.median(p[:, 0])), float(np.median(p[:, 1]))
             d = {"x": cx, "y": cy, "near": near, "height": top, "width": width, "n": int(sel.sum()), "edge": edge,
-                 "bearing": float(math.atan2(cy, cx)), "range": float(math.hypot(cx, cy))}
-            if OBJECT_HEIGHT[0] <= top <= OBJECT_HEIGHT[1] and OBJECT_WIDTH[0] <= width <= OBJECT_WIDTH[1] and not edge:
+                 "depth": float(np.ptp(p[:, 0])), "bearing": float(math.atan2(cy, cx)), "range": float(math.hypot(cx, cy))}
+            close = near < NEAR_M
+            wall_here = (top_cut and TOP_CUT_M[0] <= near < TOP_CUT_M[1]) or \
+                (top_cut and near < TOP_CUT_M[0] and self.at_wall is not None and self.at_wall(cx, cy))
+            if close and wall_here:
+                # the kerb from close up shows only the band inside the picture (8-19 cm up at
+                # 15 cm), the height of a thing; but it runs out of the picture's top, which no
+                # thing does nearer than TOP_CUT_M (red shoved the top wall for a minute, day14)
+                big.append(d)
+                kerb.append(np.flatnonzero(sel))
+                kerb_px |= sel
+                continue
+            if OBJECT_HEIGHT[0] <= top <= OBJECT_HEIGHT[1] and (close or (OBJECT_WIDTH[0] <= width <= OBJECT_WIDTH[1] and not edge)):
                 things.append(d)
                 d["sel"] = sel
             else:

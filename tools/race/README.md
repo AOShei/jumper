@@ -30,7 +30,11 @@ pads, so the whole thing is a `play --app` the robot could run.
 
 ## The room
 
-4 x 2.6 m, a 35 cm kerb round it (a ball cannot roll over it, a crab cannot climb
+4 x 2.6 m, a 35 cm kerb round it with every corner cut off by a 45-degree wall
+0.45 m along each side (a thing in a square corner has two free faces and both
+shove it into a wall -- no crab wider than the gap can get behind it, so it
+stayed there for half a match; on the chamfer it is shoved along the diagonal
+and out), (a ball cannot roll over it, a crab cannot climb
 it, and it is what the crab localises against: taller than a crab and every
 object, so the depth image cannot mistake it for either; the camera-side wall is
 drawn as glass so it hides nothing), each half in its team's colour,
@@ -39,10 +43,11 @@ three walls (none on the camera's side) with a banner in each team's colour on
 its half of the back wall, a post at each corner; the daylight scene's sun is
 turned overhead so the kerb throws no shadow across the rink. Six objects a side by default
 (`RACE_OBJECTS`), the same six mirrored through the line so the start is even,
-in colours that are neither team's: cubes 12 cm (0.2 kg), balls 14 cm (80 g,
-they roll), cans 9 x 14 cm standing (0.15 kg, they tip and roll on their side),
-pucks 16 x 6 cm (0.15 kg). A third larger than the first set, which read small
-on camera; at 3 cm tall the first puck was walked over (probe1). The crabs
+in colours that are neither team's: cubes 15 cm (0.25 kg), balls 17 cm (0.1 kg,
+they roll), cans 11 x 17 cm standing (0.2 kg, they tip and roll on their side),
+pucks 19 x 7 cm (0.2 kg). Enlarged twice from the first set (9, 10, 6.6 x 11,
+12 x 5 cm), which read small on camera and vanished against the kerb; at 3 cm
+tall the first puck was walked over (probe1). The crabs
 start at x = +-1.55 on the line's axis, facing each other; red's half is x > 0,
 the picture's right with the camera on -y.
 
@@ -77,11 +82,17 @@ encoders, and nothing else; it is told the room it is in (the kerb's rectangle,
 the line, and that it woke up on its own mark), which a robot put down in a room
 may know. From the depth image: the floor plane under the lowest feet along the
 IMU's up (1.3 cm over the floor at rest, probe_sight), the object clusters
-(depth-connected, 3.5-16 cm tall, 3-26 cm across, not touching the picture's
-edge), the other crab (12-27 cm tall and over 20 cm wide), the kerb (anything
+(depth-connected, 3.5-21 cm tall, 3-26 cm across, not touching the picture's
+edge), the other crab (12-27 cm tall, over 26 cm wide and over 12 cm deep: its
+legs spread front to back where a thing shows only its face), the kerb (anything
 27 cm or taller: at 10 cm it was a two-zone sliver at range told from a cube by
 width alone, and the crabs lost it), and the small clusters within 0.45 m of a
-crab, which are its legs.
+crab, which are its legs. A thing against the kerb joins the kerb's cluster
+through its edges, where its depth runs into the wall's (Andrew: "when objects
+are up against a wall the crabs can't see them"): inside a cluster that reaches
+kerb height, the low zones nearer than the wall in their column by 4 cm are cut
+out and clustered on their own, by depth -- by adjacency, two cubes side by side
+came out as one wide low cluster and read as a crab (day12).
 
 Things seen are remembered in the map's frame, matched sighting to sighting
 within 0.3 m, forgotten when in plain view and unseen for 1 s (not when the other
@@ -136,6 +147,55 @@ takes the thing to be where the nose is, moving with it, for up to 3 s, and call
 it over by its own pose; longer than that unseen, it gives up. A thing the
 sweeper is shoving that turns out to be the other crab is given up at once.
 
+### Things against the wall, and the claw
+
+Nobody can stand straight behind a thing pressed to the kerb. The standing
+point is tried straight behind, then slanting 30, 55 and 75 degrees, toward the
+room's middle first, and the first the body fits in (0.24 m clear of every wall,
+chamfers included) is taken: every shove keeps a component toward the line, and
+a thing against the far wall is peeled off it a slant at a time. (A first rule
+shoved it along the end wall to the corner instead; Andrew: red "seemed to just
+push all his objects up".) The things nearest the line are picked first.
+
+While a crab shoves, the thing fills the sensor's whole picture and no wall is
+in view, so the pose runs on the dead reckoning alone for the length of the
+shove and drifts up to 0.3 m before the next kerb sighting pulls it back
+(day14: means 0.27 and 0.32 m over the race, under 0.05 m between shoves).
+A limit of a forward-looking sensor on a shove, written down rather than hidden.
+From close up the kerb shows only the band inside the picture (8-19 cm up at 15
+cm), the height of a thing, and red shoved the top wall for a minute (day14);
+the tell is a cluster running out of the picture's top row, which nothing
+object-sized does between 0.2 and 0.5 m (the view's upper edge is 0.137 +
+0.384 r up). Nearer than 0.2 m a thing is cut too -- a 17 cm ball at 10 cm read
+as wall and the wall fix pulled the pose 2 m onto it (day17) -- so there the
+map's own knowledge of the walls decides, and the wall fix takes no point under
+0.25 m. The orbit keeps the way round it chose: flipping between two blocked
+ways each frame was a crab jiggling on the spot beside a thing.
+
+Andrew asked for "a walking gait with claws extended" for the shove. Measured
+(probe_armpush: red in `claw_left`, the arm out web-up, walking into a staged
+cube, ball and can at a 0.8 stick): the cube slid 41 cm in 1.5 s without
+tipping, the ball and the can rolled ahead, and the thing stayed a thing in the
+picture with kerb points beside it. In a race (`SWEEP_CLAW=1`, day15/16) it lost
+badly: the switch into the mode is a ramp the controller ends only at the mode's
+home pose, that pose lifts the arm's leg, and against a thing it is never
+reached -- both crabs spent the race "ramping", 4 and 10 crossings against 62.
+The robot has the same ramp. Off by default.
+At contact the thing is 10 cm from the sensor and spans the picture's edges; a
+cluster nearer than 0.45 m is a thing regardless (without that the crab went
+blind on contact, probe_contact: 1895 zones, edge-cut, not a thing).
+
+Andrew asked for the claws to do this instead ("use their arms to push and move
+objects away from the walls"). Measured (probe_rake, 2026-10-15, a 15 cm cube
+staged against the -x kerb, red in `claw_left` with the arm out at the web-up
+and the thumb-up presets, the nose pitched each way, closing on it and reversing
+for 4 s): the mouth stands 29 cm ahead of the base and 8.5 cm over the floor,
+at the cube's face, not over it; the 6 cm aperture closed on the face without
+taking hold; walking into it moved the cube 5-10 cm along the wall and the
+reverse moved it nothing. The claw lifts a mug by its handle and nothing else
+(`tools/fetch/README.md`), and none of these objects has one. A claw move that
+would work needs something it can take: a 5 cm prize object, or a handle.
+
 ## Results
 
 | take | eyes | clock | score | crossings | shoves |
@@ -150,6 +210,10 @@ sweeper is shoving that turns out to be the other crab is given up at once.
 | day6 (seed 5, the radius reset fixed) | sensed | 120 s | red 9-3 | 40 | 13 shoves; poses within 0.27 m throughout |
 | day7-day10 (the orbit) | sensed | 120 s | -- | -- | the strafe model, an orbit round the other crab, an orbit into the kerb and a too-strict "behind" each found and fixed in turn |
 | day11 (seed 5, the orbit) | sensed | 120 s | red 7-4 | 25 | 11 shoves; poses within 0.08 (blue) and 0.45 m (red), means 3 and 6 cm |
+| day13 (seed 5, larger objects, wall-side things seen, wall-following shoves) | sensed | 120 s | blue 9-3 | 26 | 29 shoves (corners included); poses means 8 and 16 cm |
+| day14 (seed 5, chamfered corners, the peel, contact kept) | sensed | 120 s | red 9-3 | 62 | 11 shoves, no "not seen" give-ups, nothing left in a corner; poses means 27 and 32 cm (the shoves are blind) |
+| day15/16 (the claw shove, `SWEEP_CLAW=1`) | sensed | 120 s | tie, blue 7-5 | 4, 10 | the crabs spent the race ramping into the claw mode (see below) |
+| day18 (seed 5, the close-wall rule and the orbit's way kept) | sensed | 120 s | red 7-5 | 30 | 11 shoves, no "not seen"; poses means 23 and 24 cm |
 
 Objects shoved deep into a half end up against the far kerb, where the other
 crab can only get beside them, not behind: the slanting approaches handle it

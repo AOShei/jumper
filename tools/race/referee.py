@@ -97,13 +97,16 @@ class Referee:
             if t - self._since >= self.ready_s:
                 self.race_since = t
                 tally = self.score()
+                self.start_tally = dict(tally)
                 print(f"\n[referee] go!  red {tally[RED]} : {tally[BLUE]} blue, {self.race_s:g} s on the clock")
                 self._phase("race", t)
         elif self.state == "race":
             self._count(t)
             tally = self.score()
             total = len(self.names)
-            swept = total > 0 and (tally[RED] == total or tally[BLUE] == total)
+            # swept: every object on one half, which had to have been short of that at the
+            # start (a probe staging one object on one half is not a race already won)
+            swept = total > 0 and any(tally[c] == total and self.start_tally[c] < total for c in (RED, BLUE))
             if t - self.race_since >= self.race_s or swept:
                 self._final_clock = self.clock(t) if swept else 0.0
                 self.winner = RED if tally[RED] > tally[BLUE] else (BLUE if tally[BLUE] > tally[RED] else None)
