@@ -372,3 +372,25 @@ def test_the_set_pieces_are_cued_once_and_waited_for():
     ref.step(14.2, {"blue": True})
     with pytest.raises(referee_mod.SegmentDone, match="blue wins the match 0-2"):
         ref.step(14.3, {"blue": False})
+
+
+def test_a_winner_stood_back_up_faces_the_camera():
+    """The dance is played to the camera (Andrew, 2026-10-14: "when a crab wins
+    and does its victory dance it should be facing the camera"). A winner the
+    referee stands back up is stood facing `camera_yaw` rather than at its
+    mark's heading -- the mark faces the other crab, side-on to the shot -- and
+    without a camera heading the mark's heading is kept, as before."""
+    import torch
+
+    env = _Env()
+    seen = []
+    env.scene[arena.RED].write_root_state_to_sim = lambda root, env_ids=None: seen.append(root.clone())
+    yaw = math.radians(-90.0)                                   # the default camera's: azimuth 90 + 180
+    ref = referee_mod.Referee(env, tilt_limit=0.873, camera_yaw=yaw)
+    ref.restore("red")
+    w, x, y, z = (float(v) for v in seen[-1][0, 3:7])
+    heading = math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+    assert abs(heading - yaw) < 1e-6 and abs(math.hypot(w, z) - 1.0) < 1e-6
+    assert float(seen[-1][0, 7:].abs().sum()) == 0 and float(seen[-1][0, 2]) > arena.PLANK_TOP
+    referee_mod.Referee(env, tilt_limit=0.873).restore("red")
+    assert torch.equal(seen[-1][0, 3:7], torch.tensor([1.0, 0.0, 0.0, 0.0])), "no camera heading: the mark's"

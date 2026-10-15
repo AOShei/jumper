@@ -33,15 +33,21 @@ The plank is a static box on the world body -- not a prop entity, since it
 never moves -- on two trestles, over whatever ground the scene puts underneath
 (`--scene beach` for the sand). Its numbers are environment variables so a take
 can be framed without editing this file, the way `tools/fetch/mug.py` places
-the mug.
+the mug. Round the disc goes the dressing (`dress`): everything in it is drawn
+and nothing in it collides, so the fight on the dressed table is the fight on
+the bare one.
 """
 from __future__ import annotations
 
 import copy
 import dataclasses
+import functools
+import importlib.util
 import inspect
+import itertools
 import math
 import os
+from pathlib import Path
 from typing import Any
 
 #: The scene's names for the two crabs. The red one is the task's own robot, so
@@ -63,6 +69,26 @@ PLANK_THICK = 0.04
 START_GAP = float(os.environ.get("BATTLE_START_GAP", "0.9"))        # m between the two bases at the bell
 WOOD = (0.62, 0.45, 0.26, 1.0)
 TRESTLE = (0.35, 0.30, 0.25, 1.0)
+
+#: The dressing (Andrew, 2026-10-14: "dress it up to make the space and platform
+#: look more interesting"): a decked top with a painted ring and the two marks, a
+#: brass lip and a dark skirt round the rim, a stone plinth under the pedestal,
+#: four tiki torches round the table each with a warm light of its own, a line of
+#: red and blue pennants behind it, shells and a starfish on the sand, and the
+#: beach's own dunes, palms and rocks (`tools/fetch/scenery.py`). The camera sits
+#: on -y (azimuth 90), so behind is +y and the torches flank the shot.
+STONE = (0.58, 0.50, 0.40, 1.0)
+BRASS = (0.85, 0.66, 0.24, 1.0)
+SKIRT = (0.13, 0.10, 0.08, 1.0)
+PAINT = (0.93, 0.90, 0.84, 1.0)
+BAMBOO = (0.74, 0.60, 0.34, 1.0)
+BINDING = (0.28, 0.18, 0.10, 1.0)
+FLAME = ((1.0, 0.92, 0.45, 1.0), (1.0, 0.52, 0.10, 0.55))
+SHELL = ((0.94, 0.90, 0.80, 1.0), (0.93, 0.76, 0.70, 1.0), (0.80, 0.72, 0.60, 1.0))
+STARFISH = (0.88, 0.46, 0.24, 1.0)
+TORCH_R, TORCH_AZ = 1.3, (25.0, 155.0, 205.0, 335.0)       # m out from the centre, degrees round from +x
+PENNANT_POSTS = ((-1.6, 1.4), (1.6, 1.4))                   # behind the table, as the camera sees it
+PENNANTS = 15
 
 #: Each crab's depth sensor, as the scene names it (`_tof_for_blue`).
 TOF = {RED: "tof", BLUE: "tof2"}
@@ -142,8 +168,8 @@ def _tof_for_blue(env_cfg: Any, senses: bool) -> bool:
     return True
 
 
-def _decorate(spec: Any) -> None:
-    """The scene's last edit: the crabs made to collide, and the plank."""
+def _decorate(spec: Any, dressed: bool = True) -> None:
+    """The scene's last edit: the crabs made to collide, the plank, and the dressing."""
     import mujoco
 
     for geom in spec.geoms:
@@ -158,11 +184,14 @@ def _decorate(spec: Any) -> None:
     if ARENA == "disc":
         # a round table: the top a cylinder, on one pedestal
         cyl = mujoco.mjtGeom.mjGEOM_CYLINDER
-        spec.worldbody.add_geom(name="plank", type=cyl, size=[DISC_R, PLANK_THICK / 2, 0.0],
-                                pos=[0.0, 0.0, PLANK_TOP - PLANK_THICK / 2], rgba=list(WOOD),
-                                contype=1, conaffinity=1, group=2)
+        top = spec.worldbody.add_geom(name="plank", type=cyl, size=[DISC_R, PLANK_THICK / 2, 0.0],
+                                      pos=[0.0, 0.0, PLANK_TOP - PLANK_THICK / 2], rgba=list(WOOD),
+                                      contype=1, conaffinity=1, group=2)
         spec.worldbody.add_geom(name="trestle0", type=cyl, size=[0.18, leg_h, 0.0],
-                                pos=[0.0, 0.0, leg_h], rgba=list(TRESTLE), contype=1, conaffinity=1, group=2)
+                                pos=[0.0, 0.0, leg_h], rgba=list(STONE if dressed else TRESTLE),
+                                contype=1, conaffinity=1, group=2)
+        if dressed:
+            dress(spec, top)
         return
     spec.worldbody.add_geom(name="plank", type=box, size=[PLANK_LEN / 2, PLANK_WIDTH / 2, PLANK_THICK / 2],
                             pos=[0.0, 0.0, PLANK_TOP - PLANK_THICK / 2], rgba=list(WOOD),
@@ -170,6 +199,168 @@ def _decorate(spec: Any) -> None:
     for i, x in enumerate((-(PLANK_LEN / 2 - 0.25), PLANK_LEN / 2 - 0.25)):
         spec.worldbody.add_geom(name=f"trestle{i}", type=box, size=[0.04, PLANK_WIDTH / 2 - 0.06, leg_h],
                                 pos=[x, 0.0, leg_h], rgba=list(TRESTLE), contype=1, conaffinity=1, group=2)
+
+
+def _deck(spec: Any) -> None:
+    """Decking over the table's top: planks across it, each its own shade, with
+    grain along them and a dark seam between, drawn into a 2D texture and laid on
+    a 1 mm disc mesh with planar texture coordinates. (MuJoCo maps a texture onto
+    a cylinder's cap radially: on the cylinder itself the planks came out as a
+    pinwheel.) The feet stand on the cylinder under it; this collides with nothing."""
+    import mujoco
+    import numpy as np
+
+    n, planks = 512, 9
+    rng = np.random.default_rng(3)
+    v = np.arange(n)[:, None] / n
+    u = np.arange(n)[None, :] / n
+    band = np.floor(v * planks)
+    shade = rng.uniform(0.82, 1.12, planks)[band.astype(int)]
+    grain = 0.05 * np.sin(u * 2 * math.pi * 23 + band * 1.7 + 0.8 * np.sin(v * 2 * math.pi * 11)) \
+        + 0.03 * rng.standard_normal((n, n))
+    seam = (np.abs(v * planks - np.round(v * planks)) < 0.012) & (band > 0) & (band < planks)
+    base = np.array(WOOD[:3])
+    img = base[None, None, :] * (shade + grain)[:, :, None]
+    img[np.broadcast_to(seam, (n, n))] *= 0.45
+    tex = spec.add_texture(name="deck", type=mujoco.mjtTexture.mjTEXTURE_2D, width=n, height=n, nchannel=3)
+    tex.data = (np.clip(img, 0.0, 1.0) * 255).astype(np.uint8).tobytes()
+    mat = spec.add_material(name="deck", roughness=0.8, metallic=0.0, specular=0.2)
+    mat.textures[int(mujoco.mjtTextureRole.mjTEXROLE_RGB)] = "deck"
+    segments, half = 72, 0.0005
+    a = np.linspace(0.0, 2 * math.pi, segments, endpoint=False)
+    ring = np.stack([DISC_R * np.cos(a), DISC_R * np.sin(a)], axis=1)
+    verts = np.concatenate([[[0.0, 0.0, half]], np.column_stack([ring, np.full(segments, half)]),
+                            [[0.0, 0.0, -half]], np.column_stack([ring, np.full(segments, -half)])])
+    uv = np.column_stack([verts[:, 0] / (2 * DISC_R) + 0.5, 0.5 - verts[:, 1] / (2 * DISC_R)])
+    top, bottom = 1 + np.arange(segments), segments + 2 + np.arange(segments)
+    nxt = (np.arange(segments) + 1) % segments
+    faces = np.concatenate([np.column_stack([np.zeros(segments, int), top, top[nxt]]),
+                            np.column_stack([np.full(segments, segments + 1), bottom[nxt], bottom]),
+                            np.column_stack([top, bottom, bottom[nxt]]),
+                            np.column_stack([top, bottom[nxt], top[nxt]])])
+    mesh = spec.add_mesh(name="deck")
+    mesh.uservert = verts.ravel().tolist()
+    mesh.userface = faces.astype(np.int32).ravel().tolist()
+    mesh.usertexcoord = uv.ravel().tolist()
+    _dressing(spec, name="deck", type=mujoco.mjtGeom.mjGEOM_MESH, meshname="deck", material="deck",
+              pos=[0.0, 0.0, PLANK_TOP + half])
+
+
+def _dressing(spec: Any, **kw: Any) -> Any:
+    return spec.worldbody.add_geom(contype=0, conaffinity=0, mass=0.0, group=2, **kw)
+
+
+def _quat_z(deg: float) -> list[float]:
+    h = math.radians(deg) / 2
+    return [math.cos(h), 0.0, 0.0, math.sin(h)]
+
+
+def _torch(spec: Any, i: int, x: float, y: float) -> None:
+    import mujoco
+
+    cap, cyl, ell = mujoco.mjtGeom.mjGEOM_CAPSULE, mujoco.mjtGeom.mjGEOM_CYLINDER, mujoco.mjtGeom.mjGEOM_ELLIPSOID
+    _dressing(spec, name=f"torch{i}_pole", type=cap, size=[0.022, 0.4, 0.0], pos=[x, y, 0.4], rgba=list(BAMBOO))
+    for k, z in enumerate((0.25, 0.45, 0.65)):
+        _dressing(spec, name=f"torch{i}_band{k}", type=cyl, size=[0.027, 0.01, 0.0], pos=[x, y, z], rgba=list(BINDING))
+    _dressing(spec, name=f"torch{i}_cup", type=cyl, size=[0.065, 0.055, 0.0], pos=[x, y, 0.85], rgba=list(BINDING))
+    _dressing(spec, name=f"torch{i}_flame", type=ell, size=[0.03, 0.03, 0.07], pos=[x, y, 0.96], rgba=list(FLAME[0]))
+    _dressing(spec, name=f"torch{i}_glow", type=ell, size=[0.055, 0.055, 0.11], pos=[x, y, 0.97], rgba=list(FLAME[1]))
+    # a warm glow that reaches the table and little further (a third of it at 1.3 m, a tenth at 3)
+    light = spec.worldbody.add_light(name=f"torch{i}", pos=[x, y, 1.05], dir=[0.0, 0.0, -1.0], castshadow=False)
+    if hasattr(light, "type"):
+        light.type = mujoco.mjtLightType.mjLIGHT_POINT
+    light.diffuse = [0.55, 0.32, 0.12]
+    light.specular = [0.2, 0.12, 0.05]
+    light.attenuation = [1.0, 0.5, 1.0]
+
+
+def _pennants(spec: Any) -> None:
+    import mujoco
+
+    cap, box = mujoco.mjtGeom.mjGEOM_CAPSULE, mujoco.mjtGeom.mjGEOM_BOX
+    (x0, y0), (x1, y1) = PENNANT_POSTS
+    for i, (x, y) in enumerate(PENNANT_POSTS):
+        _dressing(spec, name=f"post{i}", type=cap, size=[0.035, 0.68, 0.0], pos=[x, y, 0.68], rgba=list(BINDING))
+    height, sag = 1.35, 0.22
+    pts = [(x0 + (x1 - x0) * f, y0 + (y1 - y0) * f, height - sag * (1 - (2 * f - 1) ** 2)) for f in
+           (k / 16 for k in range(17))]
+    for i, (a, b) in enumerate(itertools.pairwise(pts)):
+        mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]
+        d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+        length = math.sqrt(sum(c * c for c in d))
+        # a capsule stands along its z; tilt it to the segment
+        axis = [-d[1], d[0], 0.0]
+        angle = math.acos(max(-1.0, min(1.0, d[2] / length)))
+        n = math.hypot(axis[0], axis[1]) or 1.0
+        q = [math.cos(angle / 2), math.sin(angle / 2) * axis[0] / n, math.sin(angle / 2) * axis[1] / n, 0.0]
+        _dressing(spec, name=f"line{i}", type=cap, size=[0.006, length / 2, 0.0], pos=mid, quat=q, rgba=list(SKIRT))
+    for i in range(PENNANTS):
+        f = (i + 0.5) / PENNANTS
+        x, y, z = x0 + (x1 - x0) * f, y0 + (y1 - y0) * f, height - sag * (1 - (2 * f - 1) ** 2)
+        colour = SHELL_RED if i % 2 == 0 else SHELL_BLUE
+        _dressing(spec, name=f"pennant{i}", type=box, size=[0.055, 0.003, 0.075], pos=[x, y, z - 0.08],
+                  rgba=list(colour))
+
+
+def _shells(spec: Any) -> None:
+    import mujoco
+    import numpy as np
+
+    ell, cap = mujoco.mjtGeom.mjGEOM_ELLIPSOID, mujoco.mjtGeom.mjGEOM_CAPSULE
+    rng = np.random.default_rng(11)
+    for i in range(12):
+        r, a = rng.uniform(0.95, 1.6), rng.uniform(-150.0, -30.0) if i < 7 else rng.uniform(0.0, 360.0)
+        x, y = r * math.cos(math.radians(a)), r * math.sin(math.radians(a))
+        if min(math.hypot(x - TORCH_R * math.cos(math.radians(t)), y - TORCH_R * math.sin(math.radians(t)))
+               for t in TORCH_AZ) < 0.15:
+            continue
+        _dressing(spec, name=f"shell{i}", type=ell, size=[0.038, 0.03, 0.014], pos=[x, y, 0.012],
+                  quat=_quat_z(float(rng.uniform(0.0, 180.0))), rgba=list(SHELL[i % 3]))
+    for i, (x, y, yaw) in enumerate(((0.75, -1.15, 20.0), (-1.2, 0.3, 70.0))):
+        for k in range(5):
+            a = math.radians(yaw + 72 * k)
+            _dressing(spec, name=f"starfish{i}_{k}", type=cap, size=[0.012, 0.045, 0.0],
+                      pos=[x + 0.05 * math.cos(a), y + 0.05 * math.sin(a), 0.012],
+                      quat=[math.cos(math.pi / 4) * math.cos(a / 2), -math.sin(math.pi / 4) * math.sin(a / 2),
+                            math.sin(math.pi / 4) * math.cos(a / 2), math.cos(math.pi / 4) * math.sin(a / 2)],
+                      rgba=list(STARFISH))
+
+
+def dress(spec: Any, top: Any) -> None:
+    """The dressing round the disc; `top` is the table's top, which gets the decking."""
+    import mujoco
+
+    cyl, box = mujoco.mjtGeom.mjGEOM_CYLINDER, mujoco.mjtGeom.mjGEOM_BOX
+    _deck(spec)
+    # the rim: a brass lip at the top edge over a dark skirt
+    _dressing(spec, name="lip", type=cyl, size=[DISC_R + 0.006, 0.006, 0.0], pos=[0.0, 0.0, PLANK_TOP - 0.006],
+              rgba=list(BRASS))
+    _dressing(spec, name="skirt", type=cyl, size=[DISC_R + 0.012, (PLANK_THICK - 0.012) / 2, 0.0],
+              pos=[0.0, 0.0, PLANK_TOP - 0.012 - (PLANK_THICK - 0.012) / 2], rgba=list(SKIRT))
+    # the paint: a ring at the dodges' radius, the centre spot, and a mark the colour of each crab
+    z = PLANK_TOP + 0.0016
+    for i in range(48):
+        a = 360.0 * i / 48
+        r = DISC_R * 0.68
+        _dressing(spec, name=f"ring{i}", type=box, size=[r * math.pi / 48 + 0.002, 0.012, 0.0005],
+                  pos=[r * math.cos(math.radians(a)), r * math.sin(math.radians(a)), z],
+                  quat=_quat_z(a + 90.0), rgba=list(PAINT))
+    _dressing(spec, name="spot", type=cyl, size=[0.03, 0.0005, 0.0], pos=[0.0, 0.0, z], rgba=list(PAINT))
+    for name, x, colour in (("mark_red", -START_GAP / 2, SHELL_RED), ("mark_blue", START_GAP / 2, SHELL_BLUE)):
+        _dressing(spec, name=name, type=cyl, size=[0.09, 0.0005, 0.0], pos=[x, 0.0, z], rgba=list(colour))
+    # the plinth under the pedestal
+    _dressing(spec, name="plinth0", type=cyl, size=[0.55, 0.03, 0.0], pos=[0.0, 0.0, 0.03], rgba=list(STONE))
+    _dressing(spec, name="plinth1", type=cyl, size=[0.36, 0.025, 0.0], pos=[0.0, 0.0, 0.085],
+              rgba=[c * 0.92 for c in STONE[:3]] + [1.0])
+    for i, a in enumerate(TORCH_AZ):
+        _torch(spec, i, TORCH_R * math.cos(math.radians(a)), TORCH_R * math.sin(math.radians(a)))
+    _pennants(spec)
+    _shells(spec)
+    scenery = Path(__file__).resolve().parents[1] / "fetch" / "scenery.py"
+    loader = importlib.util.spec_from_file_location("_fetch_scenery", scenery)
+    module = importlib.util.module_from_spec(loader)
+    loader.loader.exec_module(module)
+    module.decorate(spec)
 
 
 def margin(x: float, y: float) -> float:
@@ -180,9 +371,10 @@ def margin(x: float, y: float) -> float:
     return min(PLANK_LEN / 2 - abs(x), PLANK_WIDTH / 2 - abs(y))
 
 
-def apply_arena(env_cfg: Any, *, senses: bool = False) -> None:
+def apply_arena(env_cfg: Any, *, senses: bool = False, dressed: bool = True) -> None:
     """The second crab, the plank, and a camera on the two of them. `senses`
-    keeps the crabs' depth sensors, for a pilot that looks for the other crab."""
+    keeps the crabs' depth sensors, for a pilot that looks for the other crab;
+    `dressed` is the look round the disc (`dress`), which collides with nothing."""
     from mjlab.viewer.viewer_config import ViewerConfig
 
     from scenes.registry import _install_spec_edits
@@ -211,7 +403,7 @@ def apply_arena(env_cfg: Any, *, senses: bool = False) -> None:
             moved.append(name)
 
     tof = _tof_for_blue(env_cfg, senses)
-    _install_spec_edits(env_cfg.scene, None, _decorate)
+    _install_spec_edits(env_cfg.scene, None, functools.partial(_decorate, dressed=dressed))
 
     # Two hexapods and a plank: more contacts than one robot on a plane.
     env_cfg.sim.nconmax = max(int(env_cfg.sim.nconmax or 0), 512)

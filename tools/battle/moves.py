@@ -122,10 +122,12 @@ class Performer:
         print(f"\n[{self.label}] {t:6.2f}s  plays {mode}" + (f" for {cut_s:g} s" if cut_s else ""))
 
     def leave(self, t: float) -> None:
-        """Menu, let go: leaves a motion mode. A set piece that ends in the tilt
-        fallback keeps its toggle latched, and the latch re-enters the piece as
-        soon as the crab is upright again (the salute of the first brain take
-        played twice, the second time into the next round's bell)."""
+        """Menu, let go: leaves a motion mode. A set piece that ended in the tilt
+        fallback used to keep its toggle latched, and the latch re-entered the
+        piece as soon as the crab was upright again (the salute of the first brain
+        take played twice, the second time into the next round's bell); since
+        2026-10-15 the controller releases the latch of a motion it leaves early
+        (README, "The reset"), and this press covers whatever mode is left."""
         self.mode, self._since, self._pressed, self._cut_s, self._cutting_since = "_leave", t, t, None, None
         print(f"\n[{self.label}] {t:6.2f}s  leaves {self.player.fsm.mode}")
 

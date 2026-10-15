@@ -594,7 +594,13 @@ is down), for switches.
 
 **A latch outlives nothing.** A recording that plays out releases its mode's latch and the
 cascade hands back (`jumper.jump`, 1.17 s after it starts); stale pad input releases them all
-(§3).
+(§3). A recording the cascade leaves *before* it plays out -- the tilt fallback, stale feedback
+-- is over the same way, and its latch goes with it. Until 2026-10-15 it did not: a dash that
+tipped the robot stayed latched through `safe`, and the moment the robot was level again the
+cascade entered the dash from the start, with nobody pressing anything (a crab battle's second
+round opened with one crab dashing off its mark). On the robot that is a fall, a person standing
+it back up, and the move it fell on playing again. A gait left the same way keeps its latch:
+`carry` is a held LB, and letting go of a dead-man switch is the operator's to do.
 
 ### 5.4 The keyboard for switches
 

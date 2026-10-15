@@ -29,6 +29,42 @@ Every strafe and the back-off stop at the plank's edge (`EDGE_M` of plank left
 in the direction of travel, checked every step): on the 0.7 m plank a circle
 at full stick from the mark walked straight off the side in 0.7 s.
 
+**Not falling off comes before winning** (Andrew, 2026-10-14: "in every fight
+both crabs fall off... the crab seems to throw itself off unnecessarily after
+it's already won. We want the crabs to try to beat the opponent, but they also
+need to prioritize not falling off"). In the thirteen matches before this, the
+winner was on the sand or at the rim at the end of every round (the referee
+stood it back up for its cheer in all 30 of them), because a shove is a walk
+at full stick into a foe that stops resisting the moment it goes over, and
+the referee calls the round only when the loser's base is near the sand, a
+second later. Three rules, applied over every intent:
+
+* **the guard** -- no frame walks the base to within `KEEP_M` of the rim
+  (`STEP_M` ahead of it, in the direction the sticks ask for); the walk is
+  zeroed and the turn kept. A foe shoved head on has its base 0.33-0.38 m
+  ahead of the shover's, so a shover held at `KEEP_M + STEP_M` has pushed the
+  foe's base to the rim, where its rear feet are already off. A charge, a
+  brace or a wedge the guard has held for `HOLD_S` is over: the crab rolls
+  again from where it stands, which is on the rim, so the roll is mostly a
+  recentre (in the first two matches with the guard the bull stood held at
+  the rim, charging at nothing, until the matador shoved it over from the
+  side: 0-4 in rounds).
+* **the foe over the rim is a win** -- its base past the rim or under the
+  table's top: the crab stops shoving that instant and walks back to the
+  middle, before the referee has called it.
+* **`recentre`** -- from further out than `RIM_M` an intent ends with a walk
+  back toward the middle, facing the foe, rather than a brace or a back-off
+  on the edge.
+
+**The buck** (Andrew, 2026-10-15: "the red crab was a little over the top of
+the blue crab, it would be interesting to see what would happen if the blue
+crab tried to dash or jump from this position"): a crab whose foe's base is
+`BUCK_UP_M` or more above its own and within `BUCK_M`, ahead of it, presses
+the jump (`BRAIN_BUCK=dash` the hop instead) whatever it was doing, and logs
+what it did to the foe's tilt and height; not again within `BUCK_COOL_S`.
+Every style has it. Every style but the boxer (in the claw mode, where the
+hop cannot be pressed) also rolls the `dash` now, the bull most.
+
 `BRAIN_MODE=claw_left` fights the whole round in the claw mode instead: the
 crab enters it at the bell, carries its arm straight out, and snaps the claw
 at a foe within `SNAP_M`. The probes of 2026-10-14 (`README.md`, "What a crab
@@ -73,7 +109,7 @@ SNAP_M = float(os.environ.get("BRAIN_SNAP_M", "0.45"))         # the claw snaps 
 SNAP_S = float(os.environ.get("BRAIN_SNAP_S", "0.5"))          # one snap: shut for half of it, open for half
 PRESS_S = 0.3
 
-INTENTS = ("charge", "brace", "dodge", "back_off", "circle", "counter", "wedge", "strike", "dash")
+INTENTS = ("charge", "brace", "dodge", "back_off", "circle", "counter", "wedge", "strike", "dash", "recentre", "buck")
 
 #: The playbooks (Andrew, 2026-10-14: "each crab running a different strategy...
 #: crabs should be defensive too... some sport and strategy"). A style is an
@@ -88,8 +124,8 @@ INTENTS = ("charge", "brace", "dodge", "back_off", "circle", "counter", "wedge",
 #:               the foe commits
 STYLES = {
     "bull": {"aggression": 0.9, "mode": "", "extra": {"dash": 1.6}},     # (the dash only where the bundle has it; at 0.8 it was rolled once in three rounds, dash3.mp4)
-    "matador": {"aggression": 0.2, "mode": "", "extra": {"counter": 0.7}},
-    "wrestler": {"aggression": 0.6, "mode": "", "extra": {"wedge": 0.6}},
+    "matador": {"aggression": 0.2, "mode": "", "extra": {"counter": 0.7, "dash": 0.3}},
+    "wrestler": {"aggression": 0.6, "mode": "", "extra": {"wedge": 0.6, "dash": 0.4}},
     "boxer": {"aggression": 0.5, "mode": "claw_left", "extra": {"strike": 0.5}},
 }
 WEDGE_M = float(os.environ.get("BRAIN_WEDGE_M", "0.17"))        # the wedge drives in to this base-to-base range
@@ -117,6 +153,19 @@ DASH_M = (float(os.environ.get("BRAIN_DASH_MIN_M", "0.55")), float(os.environ.ge
                                                                # the hop (jumper.dash, 0.47 m of travel) is launched
                                                                # with the foe this far off and dead ahead
 DASH_WAIT_S = float(os.environ.get("BRAIN_DASH_WAIT_S", "3.0"))   # the hop plays out and hands back by itself
+KEEP_M = float(os.environ.get("BRAIN_KEEP_M", "0.22"))          # table the base keeps on every side: the front feet
+                                                               # stand 0.18 m ahead of it (NOMINAL_FOOT_XY)
+STEP_M = float(os.environ.get("BRAIN_STEP_M", "0.12"))          # how far ahead the guard looks: one more step's worth
+RIM_M = float(os.environ.get("BRAIN_RIM_M", "0.5"))             # further out than this, the next intent is a recentre
+RECENTRE_S = float(os.environ.get("BRAIN_RECENTRE_S", "3.0"))
+HOLD_S = float(os.environ.get("BRAIN_HOLD_S", "0.4"))           # a push the guard has held this long is over
+FACE_DEG = float(os.environ.get("BRAIN_FACE_DEG", "10"))        # a cheer or a dance faces the camera within this
+FACE_S = float(os.environ.get("BRAIN_FACE_S", "6.0"))           # ...or starts anyway after this long turning
+BUCK = os.environ.get("BRAIN_BUCK", "jump")                     # the mode pressed under a foe: jump, or dash
+BUCK_UP_M = float(os.environ.get("BRAIN_BUCK_UP_M", "0.025"))   # the foe's base this much above mine...
+BUCK_M = float(os.environ.get("BRAIN_BUCK_M", "0.30"))          # ...and this near is a foe riding over me
+BUCK_COOL_S = float(os.environ.get("BRAIN_BUCK_COOL_S", "4.0"))
+BUCK_WAIT_S = float(os.environ.get("BRAIN_BUCK_WAIT_S", "3.0"))
 
 
 def weights(aggression: float, *, near: bool, extra: dict | None = None) -> dict[str, float]:
@@ -144,6 +193,7 @@ def _yaw(q) -> float:
 def make_pilot(env, player, side):
     import dataclasses
 
+    from arena import PLANK_TOP
     from arena import margin as arena_margin
     from moves import MOVES, WALKING, Performer
 
@@ -155,8 +205,8 @@ def make_pilot(env, player, side):
     style = STYLES[getattr(side, "style", None) or "bull"]
     aggression = side.aggression if side.aggression is not None else style["aggression"]
     extra = dict(style["extra"])
-    if "dash" in extra and "dash" not in side.presses:
-        extra.pop("dash")                                        # (no hop in this bundle yet)
+    if "dash" in extra and ("dash" not in side.presses or style["mode"]):
+        extra.pop("dash")                                        # (no hop in this bundle, or a claw-mode style)
     mode = os.environ.get(f"BRAIN_{side.name.upper()}_MODE", MODE or style["mode"])
     only = os.environ.get(f"BRAIN_{side.name.upper()}_ONLY", "")   # a probe: roll this intent and no other
     if mode and mode not in side.presses:
@@ -169,7 +219,8 @@ def make_pilot(env, player, side):
              f"seed {side.seed}, moves {moves}")
 
     st = {"intent": None, "since": 0.0, "go_at": 0.0, "turning": False, "cue_id": -1, "stood": True,
-          "side": 1.0, "phase": "", "phase_since": 0.0, "pushed": None, "mode_pressed": None}
+          "side": 1.0, "phase": "", "phase_since": 0.0, "pushed": None, "mode_pressed": None,
+          "held": None, "held_since": None, "won": None, "face": None, "bucked": None}
 
     def claws(frame, t: float, near: bool):
         """In a claw mode every frame holds the arm out (d-pad left, the web-up
@@ -234,6 +285,64 @@ def make_pilot(env, player, side):
         dy = (-ly * fwd[1] + lx * right[1]) / n * reach
         return margin(x + dx, y + dy)
 
+    def guard(frame, t: float):
+        """The frame with its walk zeroed where that walk would take the base to
+        within KEEP_M of the rim, STEP_M on; the turn and the buttons are kept."""
+        if frame is None or (frame.lx == 0.0 and frame.ly == 0.0):
+            return frame
+        left = room(frame.lx, frame.ly, STEP_M)
+        if left >= KEEP_M:
+            return frame
+        if st["held"] is None or t - st["held"] > 2.0:
+            log(t, f"holds at the rim ({left:.2f} m of table {STEP_M:.2f} m on, {st['intent']})")
+        st["held"] = t
+        if st["held_since"] is None:
+            st["held_since"] = t
+        return dataclasses.replace(frame, lx=0.0, ly=0.0)
+
+    def unlatch(t: float, name: str):
+        """Press a latched toggle off: the chord again for PRESS_S, then roll again."""
+        if st.get("unlatch") is None:
+            st["unlatch"] = t
+            log(t, f"the {name} is still latched {t - st['pushed']:.1f} s on: presses it off")
+        if t - st["unlatch"] < PRESS_S:
+            return GamepadState(buttons=side.presses[name].buttons)
+        st["unlatch"] = None
+        decide(t, view()[1] < NEAR_M, f"after the stuck {name}")
+        return None
+
+    def foe_above():
+        """The foe riding over me: its base BUCK_UP_M above mine, within BUCK_M,
+        ahead; (how far up, how far off) or None."""
+        f, p = foe.data.root_link_pos_w[0], me.data.root_link_pos_w[0]
+        up = float(f[2] - p[2])
+        bearing, rng_m, _ = view()
+        if up >= BUCK_UP_M and rng_m < BUCK_M and abs(bearing) < math.radians(70):
+            return up, rng_m
+        return None
+
+    def foe_tilt() -> float:
+        g = foe.data.projected_gravity_b[0]
+        return math.degrees(math.acos(max(-1.0, min(1.0, -float(g[2])))))
+
+    def foe_over() -> bool:
+        """The foe's base past the rim, or under the table's top: it is going over."""
+        f = foe.data.root_link_pos_w[0]
+        return margin(float(f[0]), float(f[1])) < -0.05 or float(f[2]) < PLANK_TOP
+
+    def to_centre(stick: float, rx: float = 0.0):
+        """Slide toward the table's middle at `stick`, in whatever direction the
+        body is facing, so the nose can stay on the foe (`rx`) meanwhile."""
+        p = me.data.root_link_pos_w[0]
+        x, y = float(p[0]), float(p[1])
+        r = math.hypot(x, y)
+        if r < 0.05:
+            return GamepadState(rx=rx)
+        yaw = _yaw(me.data.root_link_quat_w[0])
+        fwd, right = (math.cos(yaw), math.sin(yaw)), (math.sin(yaw), -math.cos(yaw))
+        cx, cy = -x / r, -y / r
+        return GamepadState(ly=-(cx * fwd[0] + cy * fwd[1]) * stick, lx=(cx * right[0] + cy * right[1]) * stick, rx=rx)
+
     def arc(side: float, stick: float = WALK) -> dict:
         """The sticks that slide the crab sideways ALONG the table's rim rather than
         across it: the tangent of the circle through the crab, in the sense that is
@@ -287,7 +396,7 @@ def make_pilot(env, player, side):
         bearing = math.atan2(-y, -x) - _yaw(me.data.root_link_quat_w[0])
         bearing = (bearing + math.pi) % (2 * math.pi) - math.pi
         rx = facing(bearing)
-        return GamepadState(rx=rx) if rx else GamepadState(ly=-0.7 * WALK)
+        return GamepadState(rx=rx) if rx else GamepadState(ly=-WALK)
 
     def facing(bearing: float) -> float:
         """The right stick that faces the foe: 0 when it is ahead within the band."""
@@ -305,6 +414,16 @@ def make_pilot(env, player, side):
             w["back_off"] = 0.0
         if why.startswith("no room"):
             w["dodge"] = w["circle"] = 0.0                       # the strafe that just ended for lack of plank
+        if radius() > RIM_M:
+            w["brace"] = w["back_off"] = 0.0                     # (a brace on the edge is a crab waiting to be tipped)
+            if not near and st.get("last_intent") != "recentre":
+                w["recentre"] = 2.0                              # out on the rim: back toward the middle first
+        if why == "held at the rim":
+            # the push cannot go on without a step off the table: round the foe along
+            # the arc, or back toward the middle, before another go at it
+            w["charge"] = 0.3 * w.get("charge", 0.0)
+            w["dodge"] = w.get("dodge", 0.0) + 0.5
+            w["recentre"] = max(w.get("recentre", 0.0), 1.0)
         if only in w:
             w = {only: 1.0}
         names = [n for n in INTENTS if w.get(n, 0.0) > 0]
@@ -313,11 +432,26 @@ def make_pilot(env, player, side):
         pick = names[int(np.searchsorted(np.cumsum(p / p.sum()), roll, side="right").clip(0, len(names) - 1))]
         hesitate = float(rng.uniform(0.0, 1.2 * (1 - aggression))) if why == "the bell" else 0.0
         st.update(intent=pick, since=None, go_at=t + hesitate, turning=False, pushed=None, side=1.0,
-                  last_intent=pick, stage="")
+                  last_intent=pick, stage="", held_since=None, unlatch=None)
         log(t, f"{pick} ({why}; roll {roll:.2f} over " + ", ".join(f"{n} {w[n]:.2f}" for n in names)
             + (f"; hesitates {hesitate:.1f} s" if hesitate else ""))
 
     def act(t: float):
+        """One step of the fight: the win check, then the intent, then the guard."""
+        if foe_over():
+            if st["won"] is None:
+                st["won"] = t
+                log(t, f"the foe is over the rim: pulls back (me {radius():.2f} m out)")
+            frame = to_the_middle()
+            return guard(frame if frame is not None else GamepadState(), t)
+        frame = intend(t)
+        frame = guard(frame if frame is not None else intend(t), t)
+        held = st["held_since"]
+        if held is not None and t - held > HOLD_S and st["intent"] in ("charge", "brace", "wedge", "dash"):
+            decide(t, view()[1] < NEAR_M, "held at the rim")
+        return frame
+
+    def intend(t: float):
         bearing, rng_m, _ = view()
         if t < st["go_at"]:
             return GamepadState(rx=facing(bearing))             # hesitating on the mark
@@ -327,6 +461,14 @@ def make_pilot(env, player, side):
         since = t - st["since"]
         intent = st["intent"]
         near = rng_m < NEAR_M
+        above = foe_above() if intent != "buck" and st.get("lock") is None and BUCK in side.presses else None
+        if above is not None and (st["bucked"] is None or t - st["bucked"] > BUCK_COOL_S) \
+                and player.fsm.mode == "locomotion" and player.fsm.running_policy:
+            st.update(intent="buck", since=t, go_at=t, pushed=t, stage="press", held_since=None, bucked=t,
+                      z0=float(me.data.root_link_pos_w[0, 2]), z_max=float(me.data.root_link_pos_w[0, 2]),
+                      foe0=(foe_tilt(), float(foe.data.root_link_pos_w[0, 2])), foe_max=(0.0, 0.0))
+            log(t, f"the foe is on top of me ({100 * above[0]:.0f} cm up, {above[1]:.2f} m off): bucks with the {BUCK}")
+            intent, since = "buck", 0.0
         if intent in ("charge", "brace") and near and not mode and st.get("lock") is None:
             p = me.data.root_link_pos_w[0]
             here = (float(p[0]), float(p[1]))
@@ -494,6 +636,9 @@ def make_pilot(env, player, side):
                 rx = facing(bearing)
                 if rx:
                     return GamepadState(rx=rx)
+                if DASH_M[0] <= rng_m <= DASH_M[1] and room(0.0, -1.0, 0.35) < KEEP_M:
+                    decide(t, near, "no room to dash")          # the hop lands 0.21-0.33 m on; not off the rim
+                    return None
                 if DASH_M[0] <= rng_m <= DASH_M[1] and fsm.mode == "locomotion" and fsm.running_policy:
                     st["stage"], st["pushed"], st["rng0"] = "hop", t, rng_m
                     st["z0"] = st["z_max"] = float(me.data.root_link_pos_w[0, 2])
@@ -510,13 +655,45 @@ def make_pilot(env, player, side):
                 st["z_max"] = max(st["z_max"], float(me.data.root_link_pos_w[0, 2]))
                 if u < PRESS_S:
                     return GamepadState(buttons=side.presses["dash"].buttons)
-                if fsm.mode == "dash" or u < 1.0:
+                if u < DASH_WAIT_S + 1.0 and (fsm.mode == "dash" or u < 1.0):
                     return GamepadState()                                   # in the air: the clip drives
                 if u < DASH_WAIT_S and not (fsm.mode == "locomotion" and fsm.running_policy):
                     return GamepadState()
+                if fsm.mode == "dash":
+                    return unlatch(t, "dash")                               # (as the buck's: belt and braces)
                 decide(t, near, f"after the dash: {st['rng0']:.2f} -> {rng_m:.2f} m to the foe, "
                                 f"the base {100 * (st['z_max'] - st['z0']):.0f} cm up at most")
                 return None
+        if intent == "buck":
+            # Under the foe: press the jump (or the hop), let the clip play out, hand
+            # back, and say what it did to the foe.
+            fsm = player.fsm
+            u = t - st["pushed"]
+            st["z_max"] = max(st["z_max"], float(me.data.root_link_pos_w[0, 2]))
+            st["foe_max"] = (max(st["foe_max"][0], foe_tilt() - st["foe0"][0]),
+                             max(st["foe_max"][1], float(foe.data.root_link_pos_w[0, 2]) - st["foe0"][1]))
+            if u < PRESS_S:
+                return GamepadState(buttons=side.presses[BUCK].buttons)
+            if u < BUCK_WAIT_S + 1.0 and (fsm.mode == BUCK or u < 1.0
+                                          or (u < BUCK_WAIT_S and not (fsm.mode == "locomotion" and fsm.running_policy))):
+                return GamepadState()
+            if fsm.mode == BUCK:
+                # the clip ended in the tilt fallback under the foe and the toggle stayed
+                # latched, re-entering the jump every time the crab got upright (hud3: 18 s
+                # of it, the crab's hands off while the matador countered). The controller
+                # now releases the latch of a motion it leaves early (README, "The reset");
+                # this press stays as belt and braces for a mode that is still on.
+                return unlatch(t, BUCK)
+            decide(t, near, f"after the buck: me {100 * (st['z_max'] - st['z0']):.0f} cm up, the foe tilted "
+                            f"{st['foe_max'][0]:+.0f} deg and rose {100 * st['foe_max'][1]:.0f} cm at most")
+            return None
+        if intent == "recentre":
+            # Out on the rim: slide back toward the middle, nose on the foe, until
+            # inside the dodges' arc or the time is up.
+            if since < RECENTRE_S and radius() > ARC_R * 0.8:
+                return to_centre(0.8 * WALK, facing(bearing))
+            decide(t, near, "back from the rim")
+            return None
         if intent == "strike":
             # The boxer's move: circle the foe with the arm swinging whenever it is in reach.
             st["swinging"] = True
@@ -532,9 +709,22 @@ def make_pilot(env, player, side):
         if referee.cue_id != st["cue_id"]:
             st["cue_id"] = referee.cue_id
             piece = referee.cue.get(side.name)
-            if piece:
+            if piece in ("cheer", "victory") and referee.camera_yaw is not None:
+                st["face"] = (piece, t)                 # turn to the camera first, then play
+            elif piece:
                 cut = TAUNT_CUT_S if piece == "taunt" else (VICTORY_CUT_S if piece == "victory" else None)
                 performer.start(moves[piece], t, cut_s=cut)
+        if st["face"] is not None:
+            piece, t0 = st["face"]
+            fsm = player.fsm
+            err = (referee.camera_yaw - _yaw(me.data.root_link_quat_w[0]) + math.pi) % (2 * math.pi) - math.pi
+            if abs(err) > math.radians(FACE_DEG) and t - t0 < FACE_S:
+                if fsm.mode in WALKING and fsm.running_policy:
+                    return GamepadState(rx=-math.copysign(1.0 if abs(err) > math.radians(40) else TURN_STICK, err))
+                return None
+            log(t, f"faces the camera ({math.degrees(err):+.0f} deg off after {t - t0:.1f} s)")
+            st["face"] = None
+            performer.start(moves[piece], t, cut_s=VICTORY_CUT_S if piece == "victory" else None)
         if performer.busy(t):
             return performer.state(t)
         if not referee.live:
@@ -560,12 +750,11 @@ def make_pilot(env, player, side):
                 return frame
             st["mode_pressed"] = None
         if st["intent"] is None:
+            st["won"] = st["held"] = st["lock"] = st["lock_from"] = None    # (a lock once carried into the next round)
             decide(t, False, "the bell")
-        frame = act(t)
-        frame = frame if frame is not None else act(t)
-        return claws(frame, t, view()[1] < SNAP_M)
+        return claws(act(t), t, view()[1] < SNAP_M)
 
-    pilot.busy = performer.busy
+    pilot.busy = lambda t: st["face"] is not None or performer.busy(t)
     pilot.performer = performer
     pilot.state = st
     return pilot

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,6 +76,7 @@ class VirtualPad:
 
     def __init__(self):
         self.pilot = None
+        self.last = None
         self._t = 0.0
         self._dt = 0.0
         from controller import GamepadState
@@ -89,7 +91,8 @@ class VirtualPad:
             return self._idle
         s = self.pilot(self._t)
         self._t += self._dt
-        return s if s is not None else self._idle
+        self.last = s if s is not None else self._idle      # (what the readout shows, `hud.py`)
+        return self.last
 
     def close(self) -> None:
         pass
@@ -180,6 +183,9 @@ def main() -> None:
     parser.add_argument("--video-elevation", type=float, default=None)
     parser.add_argument("--cam", action="append", default=[], metavar="NAME:AZ:EL:DIST",
                         help="an extra camera on the same take, written beside --video as <stem>-NAME.mp4")
+    parser.add_argument("--bare", action="store_true", help="the table and the crabs only: no dressing round the "
+                        "arena, no dunes or palms (arena.dress, tools/fetch/scenery.py)")
+    parser.add_argument("--no-hud", action="store_true", help="no control readout in the video's corners (hud.py)")
     pre = argparse.ArgumentParser(add_help=False)
     pre.add_argument("--app", type=Path, default=REPO / "out/bundle_example/jumper.app")
     pre.add_argument("--task", default=None)
@@ -200,6 +206,7 @@ def main() -> None:
 
     use_backend(res)
     from arena import BLUE, RED, apply_arena
+    from hud import Hud, HudVideo
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.rl import RslRlVecEnvWrapper
     from mjrl.app_play import AppPlayer, leave_falls_to_the_app, step_the_world_at
@@ -224,7 +231,7 @@ def main() -> None:
         raise SystemExit(f"error: {error}") from None
     leave_falls_to_the_app(env_cfg, opened)
     apply_scene(env_cfg, args)
-    apply_arena(env_cfg, senses=senses)
+    apply_arena(env_cfg, senses=senses, dressed=not args.bare)
     env_cfg.scene.num_envs = res.num_envs
     agent_cfg = tasks.load_agent_cfg(spec.id)
     env = ManagerBasedRlEnv(cfg=env_cfg, device=res.device)
@@ -235,12 +242,17 @@ def main() -> None:
     players = []
     try:
         wrapped = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+        # The heading that faces the recorder: MuJoCo's free camera sits `azimuth` degrees round
+        # from +x on the far side of what it looks at (azimuth 90, the default, is on -y looking
+        # along +y), so a crab facing it has the azimuth's opposite heading.
+        azimuth = args.video_azimuth if args.video_azimuth is not None else float(env_cfg.viewer.azimuth)
         referee = Referee(env, tilt_limit=tilt_limit(opened), best_of=args.best_of, linger_s=args.linger,
-                          ready_s=args.ready, round_s=args.round_s, moves=not args.no_moves)
+                          ready_s=args.ready, round_s=args.round_s, moves=not args.no_moves,
+                          camera_yaw=math.radians(azimuth + 180.0))
         keys_to = "red" if args.red == "keys" else ("blue" if args.blue == "keys" else "red")
-        made = {}
+        made, pads = {}, {}
         for i, (name, me, foe) in enumerate((("red", RED, BLUE), ("blue", BLUE, RED))):
-            pad = VirtualPad()
+            pad = pads[name] = VirtualPad()
             pad._dt = env.step_dt
             player = AppPlayer(opened, wrapped, pad=pad, entity=me, read_keys=(keys_to == name), label=name)
             players.append(player)
@@ -255,16 +267,20 @@ def main() -> None:
             if args.video is not None:
                 from mjrl.viewer.video import ReplayVideo
 
-                videos.append(ReplayVideo(env, args.video, fps=args.video_fps, width=args.video_width,
-                                          height=args.video_height, env_index=0,
-                                          camera_distance=args.video_distance, azimuth=args.video_azimuth,
-                                          elevation=args.video_elevation))
+                hud = Hud([(name, getattr(args, f"{name}_style"), pads[name], player, made.get(name))
+                           for name, player in zip(("red", "blue"), players)], referee)
+                record = (lambda path, **kw: ReplayVideo(env, path, **kw)) if args.no_hud else \
+                    (lambda path, **kw: HudVideo(env, path, hud=hud, **kw))
+                videos.append(record(args.video, fps=args.video_fps, width=args.video_width,
+                                     height=args.video_height, env_index=0,
+                                     camera_distance=args.video_distance, azimuth=args.video_azimuth,
+                                     elevation=args.video_elevation))
                 for spec_ in args.cam:
                     name, az, el, dist = spec_.split(":")
-                    videos.append(ReplayVideo(env, args.video.with_name(f"{args.video.stem}-{name}{args.video.suffix}"),
-                                              fps=args.video_fps, width=args.video_width, height=args.video_height,
-                                              env_index=0, camera_distance=float(dist), azimuth=float(az),
-                                              elevation=float(el)))
+                    videos.append(record(args.video.with_name(f"{args.video.stem}-{name}{args.video.suffix}"),
+                                         fps=args.video_fps, width=args.video_width, height=args.video_height,
+                                         env_index=0, camera_distance=float(dist), azimuth=float(az),
+                                         elevation=float(el)))
                 for v in videos:
                     v.__enter__()
             speed = args.speed if args.speed is not None else (0.0 if viewer is None else 1.0)

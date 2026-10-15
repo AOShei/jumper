@@ -25,7 +25,10 @@ the loser (the shove carries the shover: in two of the first three brain
 takes the winner was on the sand too) is stood back up in the middle of the
 plank, the loser left where it fell -- the world is reset after it, and the
 crabs stand on their marks for `ready_s` while the controllers settle. First
-to a majority of `best_of` wins the match.
+to a majority of `best_of` wins the match. A cheer and the dance are played
+to the camera: `camera_yaw` is the heading that faces it (the duel works it
+out from the recorder's azimuth), a crab stood back up is stood facing it,
+and a pilot turns its crab to it before it presses the piece.
 
 The pilots read `live` (the round is on), `fight_since` and `cue`, and nothing
 else: the referee is the only thing that resets the world.
@@ -41,7 +44,7 @@ from arena import margin as arena_margin
 FLIP_DEG = 90.0
 #: Plank a performer needs on every side of it: the third brain take's winner
 #: stood upright at the plank's end, was left there, and its dance went off it.
-PERFORM_MARGIN = 0.3
+PERFORM_MARGIN = 0.25
 #: Base height under which a crab is on the ground: the stance is 0.107 m, the
 #: plank's top 0.25, so 0.16 is within 5 cm of the sand and below any crab still
 #: standing on the plank.
@@ -56,7 +59,7 @@ class Referee:
     def __init__(self, env, *, tilt_limit: float, best_of: int = 3, linger_s: float = 3.0,
                  ready_s: float = 2.0, round_s: float = 45.0, down_s: float = 0.5, out_s: float = 3.0,
                  plank_top: float = PLANK_TOP, moves: bool = True, taunt_max_s: float = 16.0,
-                 cheer_max_s: float = 12.0, victory_max_s: float = 24.0) -> None:
+                 cheer_max_s: float = 12.0, victory_max_s: float = 24.0, camera_yaw: float | None = None) -> None:
         self.env = getattr(env, "unwrapped", env)
         self.crabs = {"red": self.env.scene[RED], "blue": self.env.scene[BLUE]}
         self.best_of = best_of
@@ -66,6 +69,7 @@ class Referee:
         self.tilt_limit = tilt_limit          # radians, the app's `fsm.tilt_limit`
         self.plank_top = plank_top
         self.moves = moves
+        self.camera_yaw = camera_yaw          # radians, the heading that faces the camera; None for the mark's
         self.ceiling = {"taunt": taunt_max_s, "cheer": cheer_max_s, "victory": victory_max_s}
         self._tilted_since: dict[str, float | None] = {"red": None, "blue": None}
         self._flipped_since: dict[str, float | None] = {"red": None, "blue": None}
@@ -121,12 +125,15 @@ class Referee:
         return z > self.plank_top and tilt < self.tilt_limit and room >= PERFORM_MARGIN
 
     def restore(self, name: str) -> None:
-        """Stand `name` in the middle of the plank, at its mark's heading, still."""
+        """Stand `name` in the middle of the plank, facing the camera (or at its
+        mark's heading, without one), still."""
         import torch
 
         crab = self.crabs[name]
         root = crab.data.default_root_state[:1].clone()
         root[0, 0:2] = 0.0
+        if self.camera_yaw is not None:
+            root[0, 3:7] = torch.tensor([math.cos(self.camera_yaw / 2), 0.0, 0.0, math.sin(self.camera_yaw / 2)])
         root[0, 7:] = 0.0
         ids = torch.tensor([0], device=root.device)
         crab.write_root_state_to_sim(root, ids)
