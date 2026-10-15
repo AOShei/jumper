@@ -8,7 +8,7 @@
       "tool": "scripts/deploy.py",
       "cargo": "build --release --target wasm32-unknown-unknown --no-default-features --features web",
       "wasmBindgen": "wasm-bindgen 0.2.128",
-      "commit": "2e6d1fd289eda4230cb1d031e2ea71489357b868",
+      "commit": "372819e1fe1a7c2d77e78b16f7e4968d239542d9",
       "unverifiedByTheConsumer": "A consumer's own controller is held against its own implementation by a parity test. This one is not held against anything: it arrived with the upload. A consumer that runs it should say so where the person can see it."
     },
     "mjlab": {
@@ -27,14 +27,14 @@
           "abi": "abi3-py310"
         }
       },
-      "commit": "2e6d1fd289eda4230cb1d031e2ea71489357b868",
+      "commit": "372819e1fe1a7c2d77e78b16f7e4968d239542d9",
       "note": "The same source as the wasm, built for a host that imports it. Platform-specific: `abi3` frees it from the Python version, not from the machine, so it is keyed by platform: the build machine's, and win-amd64 and macosx-universal2, cross-built. macOS is keyed without a version and the one file carries arm64 and x86_64."
     },
     "board": {
       "model": "rknn",
       "file": "runtime/board/controller",
       "platform": "aarch64-unknown-linux-gnu",
-      "commit": "2e6d1fd289eda4230cb1d031e2ea71489357b868",
+      "commit": "372819e1fe1a7c2d77e78b16f7e4968d239542d9",
       "note": "The robot's whole program: this crate, cross-compiled. From the bundle's directory: `./runtime/board/controller --bundle . --machine <toml>`."
     }
   },
@@ -248,7 +248,7 @@
   "files": {
     "README.md": {
       "bytes": 25983,
-      "sha256": "01cf0cf7fbdb987532b926018fe2a132eed37140091eb129a0e20d5d052042e8"
+      "sha256": "df7adf3ec8097774a679beef9b0b2b16e19fa4494ea0fa6489650815ed142677"
     },
     "bow.motion.trajectory.json": {
       "bytes": 143332,
@@ -520,31 +520,31 @@
     },
     "reference.json": {
       "bytes": 183530,
-      "sha256": "70e148968b762426df903a93d58363daa26ea2f57a1e1ae1ae98b7b222d762e7"
+      "sha256": "3c262508bef76541eb56fd7334341f9cb685061b174d55a8ef909efaf3b7ccb0"
     },
     "runtime/board/controller": {
       "bytes": 1634312,
-      "sha256": "e582bc43e6c5159815144f817afc66c69290ef3cc440c53a38c4e14ee25889ef"
+      "sha256": "4a7540099ce7281abe11d21081bd0b20af65a2fac03b11302bb2711a436f381e"
     },
     "runtime/mjlab/linux-x86_64/controller.so": {
-      "bytes": 2031472,
-      "sha256": "6403cf6b2864c1b2e9785641abbec0cf8cec8a55dbceb1a7f92a870a9c070c4b"
+      "bytes": 2032240,
+      "sha256": "73f91dc91622d1833d43208a55b9dda11a2db185950b122bbba2d64f9194c18b"
     },
     "runtime/mjlab/macosx-universal2/controller.so": {
       "bytes": 6467280,
-      "sha256": "c5db7d218052b8a9b9aeea0f9a8c196716939e09d3b0597b9eeaa8c476f3d484"
+      "sha256": "c0a5661bcdd560ff7c8c706c4ea177bcaf8d35fd76896c423994e4e077438b6c"
     },
     "runtime/mjlab/win-amd64/controller.pyd": {
-      "bytes": 3299085,
-      "sha256": "ff1e427e57f8760d790c7f7c663b4bb7763db69d16957711a14cd633c1e15d24"
+      "bytes": 3299597,
+      "sha256": "7aa958613cf70085d3fe743504e300c9dfe609f45a667e375bb8bb28ba20d231"
     },
     "runtime/web/controller.js": {
       "bytes": 29783,
       "sha256": "dde2baa0c7ed5fa5de30e6d53128721959853929c29fa131f64de8100380e59e"
     },
     "runtime/web/controller.wasm": {
-      "bytes": 1231548,
-      "sha256": "2fbdc3120fa00252a31d49608f06df79c84318b334d8b3b30c9e60c15344256b"
+      "bytes": 1232111,
+      "sha256": "a97a689640bc2d6b7c6d194706f5a12ecd9fce85a984094386babd4444f87906"
     },
     "salute.motion.trajectory.json": {
       "bytes": 98320,
