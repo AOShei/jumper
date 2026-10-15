@@ -21,6 +21,7 @@ import math
 
 import numpy as np
 from arena import BLUE, RED
+from room import CHAMFER, ROOM_X, ROOM_Y
 from mjrl.viewer.video import ReplayVideo
 from PIL import Image, ImageDraw, ImageFont
 
@@ -69,18 +70,19 @@ def depth_image(frame) -> Image.Image:
     return Image.fromarray(img).resize((DEPTH_W, DEPTH_H), Image.NEAREST)
 
 
-def map_image(mapper, target=None, line=None, accent=INK, things=()) -> Image.Image:
-    """The map round the base (`mapper.picture`'s look, as an image): the plan in
-    cyan, the target in yellow, the line (two world points) in white."""
+def map_image(mapper, target=None, line=None, accent=INK, things=(), foe=None) -> Image.Image:
+    """The map round the base: the room the crab was given (kerb and chamfers) in
+    white, what the sensor has mapped lately in grey, the plan in cyan, the
+    remembered things in yellow with the target ringed, the other crab in magenta."""
     from mapper import FREE, OCC, RES, N
 
     k = int(MAP_SPAN / 2 / RES)
     r0, c0 = mapper.cell(mapper.x, mapper.y)
     r0, c0 = min(max(r0, k), N - k - 1), min(max(c0, k), N - k - 1)
     sub = mapper.grid[r0 - k: r0 + k, c0 - k: c0 + k]
-    img = np.full(sub.shape + (3,), 110, dtype=np.uint8)
-    img[sub > OCC] = (30, 30, 30)
-    img[sub < FREE] = (215, 210, 195)
+    img = np.full(sub.shape + (3,), 150, dtype=np.uint8)
+    img[sub < FREE] = (200, 196, 185)
+    img[sub > OCC] = (70, 70, 70)
     scale = MAP_PX / sub.shape[1]
     im = Image.fromarray(img[::-1]).resize((MAP_PX, int(sub.shape[0] * scale)), Image.NEAREST)
     d = ImageDraw.Draw(im)
@@ -89,8 +91,14 @@ def map_image(mapper, target=None, line=None, accent=INK, things=()) -> Image.Im
         r, c = mapper.cell(wx, wy)
         return (c - (c0 - k)) * scale + scale / 2, (2 * k - 1 - (r - (r0 - k))) * scale + scale / 2
 
+    hx, hy, c = ROOM_X / 2, ROOM_Y / 2, CHAMFER
+    outline = [(-hx + c, -hy), (hx - c, -hy), (hx, -hy + c), (hx, hy - c), (hx - c, hy), (-hx + c, hy), (-hx, hy - c), (-hx, -hy + c)]
+    d.line([px(*q) for q in outline + outline[:1]], fill=(250, 250, 250), width=2)
     if line is not None:
         d.line([px(*line[0]), px(*line[1])], fill=(250, 250, 250), width=2)
+    if foe is not None:
+        fx, fy = px(*foe)
+        d.ellipse([fx - 4, fy - 4, fx + 4, fy + 4], fill=CRAB_C)
     if len(mapper.path) > 1:
         d.line([px(*p) for p in mapper.path], fill=(0, 200, 220), width=2)
     for tx, ty in things:
@@ -106,7 +114,7 @@ def map_image(mapper, target=None, line=None, accent=INK, things=()) -> Image.Im
     return im
 
 
-def panel(name: str, mode: str, intent: str, pad, senses, mapper, target, line, things=()) -> Image.Image:
+def panel(name: str, mode: str, intent: str, pad, senses, mapper, target, line, things=(), foe=None) -> Image.Image:
     im = Image.new("RGBA", (W, H), BG)
     d = ImageDraw.Draw(im)
     f12, f16 = _font(12), _font(16)
@@ -128,7 +136,7 @@ def panel(name: str, mode: str, intent: str, pad, senses, mapper, target, line, 
         d.text((x0 + 30, y0 + 55), "no senses" if senses is None else "no frame", fill=DIM, font=f12)
     mx, my = x0 + DEPTH_W + 12, y0
     if mapper is not None:
-        m = map_image(mapper, target, line, accent, things)
+        m = map_image(mapper, target, line, accent, things, foe)
         im.paste(m, (mx, my))
         d.text((mx, my + m.height + 2), "map + plan", fill=DIM, font=f12)
     else:
@@ -167,7 +175,8 @@ class Hud:
             if st.get("stage"):
                 intent = f"{intent}: {st['stage']}"
             p = panel(name, mode, intent, getattr(pad, "last", None), getattr(pilot, "senses", None),
-                      getattr(pilot, "mapper", None), st.get("target_w"), st.get("line_w"), st.get("things_w", ()))
+                      getattr(pilot, "mapper", None), st.get("target_w"), st.get("line_w"), st.get("things_w", ()),
+                      st.get("foe_w"))
             x = MARGIN if i == 0 else width - W - MARGIN
             im.paste(p, (x, MARGIN), p)
         ref = self.referee

@@ -18,13 +18,14 @@ side is x > 0 and the blue crab's x < 0. Each crab starts at its own side's far
 end on the line's axis, facing the other.
 
 The objects are props (`tasks/jumper/five_foot/objects.py`'s contact model: free
-bodies on the prop channel, so a crab's legs and shell meet them): cubes, balls,
-cans standing on end and flat pucks, in a seeded layout that is MIRRORED through
-the line so both halves start with the same objects in the same places -- a race
-is only fair if it starts even. Their sizes are picked against the crab: the
-shell's underside is ~0.08 m up at the stand, so a 0.09 m cube or a 0.10 m ball
-meets the shell's front edge and the legs rather than passing underneath (see
-`pilots/sweeper.py` for what the measured pushes did).
+bodies on the prop channel, so a crab's legs and shell meet them): round pucks,
+square pucks and small balls, in a seeded layout that is MIRRORED through the
+line so both halves start with the same objects in the same places -- a race is
+only fair if it starts even. Their sizes are picked against the crab: the
+shell's underside is ~0.08 m up at the stand, so a 7 cm puck meets the legs and
+the shell's front edge rather than passing underneath, and nothing is taller
+than 12 cm, so a cluster that runs out of the top of the depth picture is the
+kerb or the other crab (see `pilots/sweeper.py` for what the measured pushes did).
 
 Numbers are environment variables where a take may want them changed, as the
 battle's are (`RACE_*`).
@@ -57,7 +58,7 @@ from arena import (
 ROOM_X = float(os.environ.get("RACE_ROOM_X", "4.0"))      # m across the line (the picture's width)
 ROOM_Y = float(os.environ.get("RACE_ROOM_Y", "2.6"))      # m along the line (toward and away from the camera)
 KERB_H, KERB_T = 0.35, 0.05                               # the wall round the rink: taller than a crab (0.20) and every
-                                                          # object (0.14), so the depth image cannot mistake it for either
+                                                          # object (0.12), so the depth image cannot mistake it for either
                                                           # (at 10 cm it was a two-zone sliver at range, told from a cube
                                                           # by width alone, and the crabs "lost the walls", Andrew 2026-10-15)
 GLASS = 0.22                                              # the camera-side wall's alpha: at 0.35 m it would hide 0.4 m of floor
@@ -75,27 +76,25 @@ START_CLEAR = 0.55                                        # ...and from a crab's
 LINE_CLEAR = 0.25                                         # ...and from the line (an object ON the line is nobody's)
 
 #: What is on the floor: name -> (geom type, size, mass kg, how it is placed). `half_z`
-#: is the resting height of the body origin. A cube's and a puck's weight sits on a
-#: face; a ball rolls; a can stands on its end and tips when shoved.
-#: A third larger than the first set (cube 9, ball 10, can 6.6 x 11, puck 12 x 5 cm), which read
-#: small on camera (Andrew, 2026-10-15: "the objects to be a little larger"); still under
-#: `sight.OBJECT_HEIGHT`'s 16 cm and the kerb's 12.5 cm except the can, which is a thing by its width.
-#: ...and larger again on 2026-10-15 (cube 12, ball 14, can 9 x 14, puck 16 x 6 cm before): against
-#: the kerb an object has to stand proud of it by more than `sight.PROUD_M` to be seen.
+#: is the resting height of the body origin. A puck's weight sits on a face; a ball rolls.
+#: All of them LOW, 12 cm at most (cubes of 15, cans of 17 and balls of 17 cm before, 2026-10-15):
+#: the sensor's picture reaches 0.137 + 0.384 r m up the room at range r, so nothing here
+#: runs out of its top at any range, and a cluster that does is the kerb or the other crab
+#: whatever else it looks like (Andrew: "an object can never fully take up the crab's view
+#: and in this case we know if something does obscure the full view it must be a wall").
+#: `sight.OBJECT_HEIGHT` is the line.
 KINDS = {
-    "cube": {"type": "box", "size": (0.075, 0.075, 0.075), "mass": 0.25, "half_z": 0.075},
-    "ball": {"type": "sphere", "size": (0.085, 0.0, 0.0), "mass": 0.1, "half_z": 0.085},
-    "can": {"type": "cylinder", "size": (0.055, 0.085, 0.0), "mass": 0.2, "half_z": 0.085},
     "puck": {"type": "cylinder", "size": (0.095, 0.035, 0.0), "mass": 0.2, "half_z": 0.035},
+    "square": {"type": "box", "size": (0.08, 0.08, 0.035), "mass": 0.25, "half_z": 0.035},
+    "ball": {"type": "sphere", "size": (0.06, 0.0, 0.0), "mass": 0.08, "half_z": 0.06},
 }
 #: Which kinds, in what order, on each half; the layout cycles through it.
-MIX = os.environ.get("RACE_MIX", "cube,ball,can,puck,ball,cube").split(",")
+MIX = os.environ.get("RACE_MIX", "puck,square,ball,square,puck,ball").split(",")
 #: Saturated, and none of them the teams' red or blue, so an object never reads as a side.
 PALETTE = {
-    "cube": ((1.0, 0.85, 0.0, 1.0), (0.1, 0.8, 0.3, 1.0), (0.95, 0.3, 0.75, 1.0)),
+    "puck": ((0.1, 0.1, 0.1, 1.0), (1.0, 0.95, 0.6, 1.0), (0.1, 0.85, 0.9, 1.0)),
+    "square": ((1.0, 0.85, 0.0, 1.0), (0.1, 0.8, 0.3, 1.0), (0.95, 0.3, 0.75, 1.0)),
     "ball": ((1.0, 1.0, 1.0, 1.0), (1.0, 0.5, 0.0, 1.0)),
-    "can": ((0.1, 0.85, 0.9, 1.0), (0.8, 0.2, 0.9, 1.0)),
-    "puck": ((0.1, 0.1, 0.1, 1.0), (1.0, 0.95, 0.6, 1.0)),
 }
 #: A ball is light and rolls: the prop model's friction (0.35 sliding) with the rolling
 #: term kept, so a shoved ball carries on across the floor; everything else slides on
@@ -123,7 +122,7 @@ POST = (0.95, 0.95, 0.95, 1.0)
 def layout(seed: int, n: int = N_PER_SIDE) -> list[dict]:
     """The objects, mirrored through the line: `n` on the blue half (x < 0) and the
     same `n` reflected onto the red half. Each is {name, kind, x, y, rgba}.
-    `RACE_LAYOUT="cube:-1.8:0.3;ball:0.5:-0.2"` stages exactly these instead (a probe)."""
+    `RACE_LAYOUT="puck:-1.8:0.3;ball:0.5:-0.2"` stages exactly these instead (a probe)."""
     import numpy as np
 
     staged = os.environ.get("RACE_LAYOUT")

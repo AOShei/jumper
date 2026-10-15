@@ -27,19 +27,36 @@ HALF_X, HALF_Y = math.tan(math.radians(27.5)), math.tan(math.radians(21.0))
 TOF_ORIGIN = np.array([0.090678, 0.0, 0.0168455])
 TOF_EYE = TOF_ORIGIN + np.array([0.004, 0.0, 0.0])
 FOOT_R = 0.012
-FLOOR_CLEAR = 0.03
+FLOOR_CLEAR = 0.03                # a zone this far above the floor plane is not floor...
+FLOOR_SLOPE = 0.025               # ...plus this per metre of range: the plane is the IMU's up through the lowest
+                                  # foot, and a 1.4 degree tilt of it puts the floor a metre out 2.5 cm up, which
+                                  # read as a low thing at the kerb's foot, seen twice while the crab turned on the
+                                  # spot and picked (ghosts at 0.1-0.3 m from the wall, probe_orbitwall2). A 7 cm
+                                  # puck keeps its top above the line to 1.6 m; beyond that it is 2-3 zones anyway
 MAX_RANGE = 3.0
-OBJECT_HEIGHT = (0.035, 0.21)     # m above the floor, the cluster's tallest point
+OBJECT_HEIGHT = (0.03, 0.14)      # m above the floor, the cluster's tallest point: the room's things are 7-12 cm
+                                  # (room.KINDS); the picture's upper edge is 0.137 + 0.384 r m up at range r, so a
+                                  # thing is never cut by the picture's top, and a cluster that IS cut, or is taller,
+                                  # is the kerb or the other crab at any range (Andrew, 2026-10-15: "if something
+                                  # does obscure the full view it must be a wall"; before, a 17 cm ball at 10 cm read
+                                  # as wall and the wall fix pulled the pose 2 m onto it, day17, and a kerb from close
+                                  # up read as a thing until the map was asked)
 OBJECT_WIDTH = (0.03, 0.26)       # m across (a crab is 0.3-0.5, the kerb is the picture's width)
 CRAB_SKIRT = 0.45                 # m round a crab-sized cluster: the small clusters there are its legs
-CRAB_HEIGHT = (0.12, 0.27)        # a crab's shell is 0.15-0.20 up; the kerb starts where a crab ends
+CRAB_HEIGHT = (0.14, 0.27)        # a crab's shell is 0.15-0.20 up; the kerb starts where a crab ends
 CRAB_DEPTH = 0.12                 # m front to back in the picture: a crab's legs spread, a thing's face does not
 KERB_MIN = 0.27                   # the kerb is 0.35 m tall: nothing else in the room reaches this
-TOP_CUT_M = (0.2, 0.5)            # between these ranges nothing object-sized reaches the picture's top row: the view's
-                                  # upper edge is 0.137 + 0.384 r m up, 0.21 m at 0.2 m and 0.33 at 0.5, and the
-                                  # tallest thing is 0.21. Nearer than 0.2 a thing is cut too (a 17 cm ball at 10 cm:
-                                  # read as wall, the wall fix pulled the pose 2 m onto it, day17), and only the map
-                                  # can say (`at_wall`)
+CRAB_CUT_M = 0.17                 # nearer than this the other crab's shell (0.20 up) runs out of the picture's top
+                                  # too; a cut cluster farther off is the kerb, nearer the map decides (`at_wall`)
+JAM_M = 0.24                      # kerb zones nearer than this in the band JAM_BAND_M either side of the nose's
+                                  # axis, JAM_ZONES of them, are the kerb at the nose: the base stops 0.18 m from
+                                  # the face (probe_walljam). A band, not a cluster: a side wall running alongside
+                                  # at 0.22 m is one cluster whose nearest point is beside the shell and whose
+                                  # zones all lie 0.22 m to the side, and it read as a jam on every shove along
+                                  # it (day26). With a thing under the nose the kerb stays a puck's width off and
+                                  # is NOT a jam: 0.47 m with a thing ahead gave up every shove along a side wall,
+                                  # 49 in a race (day23); the wall fix handles that one
+JAM_BAND_M, JAM_ZONES = 0.12, 20
 NEAR_M = 0.45                     # nearer than this a thing fills the picture's width and touches its edges: the
                                   # width and edge gates are not asked of it (at 27 cm a 15 cm cube was 1895 zones,
                                   # edge-cut, and not a thing: the crab went blind on contact, probe_contact)
@@ -55,6 +72,48 @@ def ray_dirs() -> np.ndarray:
     uu, vv = np.meshgrid(u, v, indexing="xy")
     d = np.stack([np.ones_like(uu), -uu, vv], axis=-1).reshape(-1, 3)
     return d / np.linalg.norm(d, axis=1, keepdims=True)
+
+
+FEET = ("LF_finger_tip_link", "RF_finger_tip_link", "LM_foot_tip_link", "RM_foot_tip_link", "LR_foot_tip_link", "RR_foot_tip_link")
+STANCE_M = 0.03                   # a foot within this of the lowest foot (along the IMU's up) MAY stand on the floor
+LEG_SIDE_SCALE = 0.79             # the feet read a strafe 27% long (1.47 m for 1.16, probe_legodom, twice) where a walk
+                                  # reads within 5%: the lateral gait's feet move through the body faster than the body
+                                  # moves, and this is the measured ratio rather than an explanation
+
+
+def leg_velocity(feet_prev, feet_now, stance_prev, stance_now, dt: float, yaw_rate: float, hint=(0.0, 0.0)):
+    """The body's velocity in its own frame (m/s forward, left) from the feet that
+    stand on the floor: a standing foot does not move in the world, so its motion
+    through the body frame is the body's motion, reversed, less the turn
+    (`yaw_rate` about up carries a point r round at up x r). Legged odometry from
+    the encoders and the gyro alone.
+
+    Which feet stand: the gait lifts a foot 2.3 cm at most (probe_feet, 2026-10-15),
+    so height cannot tell stance from swing (a 1.5 cm band kept every middle foot
+    and put the median 32% short). A standing foot moves through the body at the
+    body's full speed and a swinging one forward, so against the direction the
+    sticks ask for (`hint`, forward and left) the standing feet are the ones moving
+    fastest: the median of those within 75% of the fastest (the fastest alone read
+    0.569 m/s against a truth of 0.566; a mean over a 60% band put a strafe 23%
+    long, probe_legodom). With no hint, the median of the low feet.
+    None when nothing stood through the step."""
+    both = stance_prev & stance_now
+    if not both.any() or dt <= 0:
+        return None
+    d = (feet_now[both] - feet_prev[both]) / dt
+    r = feet_now[both]
+    vx = -d[:, 0] + yaw_rate * r[:, 1]
+    vy = -d[:, 1] - yaw_rate * r[:, 0]
+    hx, hy = hint
+    n = math.hypot(hx, hy)
+    if n > 1e-6:
+        proj = (vx * hx + vy * hy) / n
+        top = float(proj.max())
+        if top < 0.02:
+            return 0.0, 0.0
+        keep = proj >= 0.75 * top
+        return float(np.median(vx[keep])), float(np.median(vy[keep])) * LEG_SIDE_SCALE
+    return float(np.median(vx)), float(np.median(vy))
 
 
 def is_crab(cluster: dict) -> bool:
@@ -92,6 +151,10 @@ class Sight:
         self.qadr = np.array([self.m.jnt_qposadr[_named(self.m, mujoco.mjtObj.mjOBJ_JOINT, n, entity)]
                               for n in self.robot.joint_names])
         self.tof_body = _named(self.m, mujoco.mjtObj.mjOBJ_BODY, "tof_sensor_link", entity)
+        self.feet_ids = np.array([_named(self.m, mujoco.mjtObj.mjOBJ_BODY, n, entity) for n in FEET])
+        self.feet = None                   # the six feet in the base frame, this step
+        self.stance = None                 # which of them stand on the floor
+        self.yaw_rate = 0.0
         self.dirs = ray_dirs()
         self._geomid = np.zeros(ROWS * COLS, dtype=np.int32)
         self._dist = np.zeros(ROWS * COLS, dtype=np.float64)
@@ -100,6 +163,9 @@ class Sight:
         self.frames = 0
         self.last = None
         self.at_wall = None                # (x, y in the base frame) -> bool: the map's say on a close, cut cluster
+        self.expected = None               # (x, y in the base frame) -> bool: a remembered thing is about here, so a
+                                           # cluster that fails this frame's gates is still that thing (not the kerb)
+        self._masks = []                   # the last frames' (thing, kerb, crab) masks, for the overlay's majority
 
     def _pose_self(self) -> None:
         q = self.robot.data.joint_pos_biased[0].cpu().numpy()
@@ -175,26 +241,34 @@ class Sight:
         """Once per control step: integrate the gyro; on a fresh exposure, read the
         image. Returns whether a frame was read."""
         g = self.gyro.data[0].cpu().numpy().astype(np.float64)
-        self.yaw += float(np.dot(g[:3], self.up())) * self.dt
+        up = self.up()
+        self.yaw_rate = float(np.dot(g[:3], up))
+        self.yaw += self.yaw_rate * self.dt
+        # the feet every step, for the odometry: forward kinematics from the encoders
+        self._pose_self()
+        self.feet = self.d.xpos[self.feet_ids].copy()
+        h = self.feet @ up
+        self.stance = h < h.min() + STANCE_M
         if not bool(self.tof.data.fresh[0]):
             return False
         r = self.tof.data.range[0].cpu().numpy().astype(np.float64)
-        self._pose_self()
-        up = self.up()
         floor = float((self.d.xpos[self.own_bodies] @ up).min()) - FOOT_R
         self_mask = self._self_mask()
         valid = r > 0
         pts = TOF_ORIGIN + r[:, None] * self.dirs
         h = pts @ up - floor
-        obj = valid & ~self_mask & (h > FLOOR_CLEAR) & (r < MAX_RANGE) & (pts[:, 0] > 0.10)
+        obj = valid & ~self_mask & (h > FLOOR_CLEAR + FLOOR_SLOPE * r) & (r < MAX_RANGE) & (pts[:, 0] > 0.10)
         self.frames += 1
-        things, big, kerb, masks = self._things(obj.reshape(ROWS, COLS), pts, h)
+        things, big, kerb, masks, jam = self._things(obj.reshape(ROWS, COLS), pts, h)
+        # the overlay's colours by a majority of the last three frames: a zone flickering
+        # between thing and wall frame to frame reads as noise, and mostly is
+        self._masks = (self._masks + [tuple(m.reshape(ROWS, COLS) for m in masks)])[-3:]
+        vote = [sum(fr[i].astype(np.int8) for fr in self._masks) * 2 > len(self._masks) for i in range(3)]
         self.last = {"t": t, "range": r.reshape(ROWS, COLS), "self": self_mask.reshape(ROWS, COLS),
                      "obj": obj.reshape(ROWS, COLS), "floor": floor, "pts": pts, "h": h,
-                     "things": things, "big": big, "kerb": kerb,
+                     "things": things, "big": big, "kerb": kerb, "jam": jam,
                      # for the readout: which zones are things, the kerb, the other crab
-                     "thing_px": masks[0].reshape(ROWS, COLS), "kerb_px": masks[1].reshape(ROWS, COLS),
-                     "crab_px": masks[2].reshape(ROWS, COLS)}
+                     "thing_px": vote[0], "kerb_px": vote[1], "crab_px": vote[2]}
         return True
 
     def _things(self, obj: np.ndarray, pts: np.ndarray, h: np.ndarray):
@@ -220,33 +294,41 @@ class Sight:
             d = {"x": cx, "y": cy, "near": near, "height": top, "width": width, "n": int(sel.sum()), "edge": edge,
                  "depth": float(np.ptp(p[:, 0])), "bearing": float(math.atan2(cy, cx)), "range": float(math.hypot(cx, cy))}
             close = near < NEAR_M
-            wall_here = (top_cut and TOP_CUT_M[0] <= near < TOP_CUT_M[1]) or \
-                (top_cut and near < TOP_CUT_M[0] and self.at_wall is not None and self.at_wall(cx, cy))
-            if close and wall_here:
-                # the kerb from close up shows only the band inside the picture (8-19 cm up at
-                # 15 cm), the height of a thing; but it runs out of the picture's top, which no
-                # thing does nearer than TOP_CUT_M (red shoved the top wall for a minute, day14)
+            tall = top_cut or top > OBJECT_HEIGHT[1]
+            if tall:
+                # not a thing, whatever is remembered there: the kerb (from close up it shows
+                # only the band inside the picture, 8-19 cm up at 15 cm, but runs out of the
+                # picture's top, which no thing does) or the other crab
                 big.append(d)
-                kerb.append(np.flatnonzero(sel))
-                kerb_px |= sel
+                if (top >= KERB_MIN and sel.sum() >= 15) or \
+                        (top_cut and (near >= CRAB_CUT_M or (self.at_wall is not None and self.at_wall(cx, cy)))):
+                    kerb.append(np.flatnonzero(sel))
+                    kerb_px |= sel
+                    d["kerb"] = True
+                elif is_crab(d):
+                    crab_px |= sel
                 continue
-            if OBJECT_HEIGHT[0] <= top <= OBJECT_HEIGHT[1] and (close or (OBJECT_WIDTH[0] <= width <= OBJECT_WIDTH[1] and not edge)):
+            if self.expected is not None and self.expected(cx, cy):
+                # tracked already: this frame's gates do not get to drop it (a thing flickered
+                # between thing and wall frame to frame, Andrew: "make the tracking of the
+                # objects more reliable and less noisy")
+                things.append(d)
+                d["sel"] = sel
+                continue
+            if OBJECT_HEIGHT[0] <= top and (close or (OBJECT_WIDTH[0] <= width <= OBJECT_WIDTH[1] and not edge)):
                 things.append(d)
                 d["sel"] = sel
             else:
                 big.append(d)
-                # the kerb: taller than anything else (at 10 cm it was told from a cube by width
-                # alone, and a cube cut by the picture's edge taken for kerb pulled the pose off, sense6)
-                if top >= KERB_MIN and sel.sum() >= 15:
-                    kerb.append(np.flatnonzero(sel))
-                    kerb_px |= sel
-                elif is_crab(d):
+                if is_crab(d):
                     crab_px |= sel
         # The other crab's legs come out as small clusters beside its big one (probe_sight,
         # 2026-10-15: a crab at 0.26 m is one cluster of 1371 zones, 0.20 m tall, with
         # leg pieces of 3-5 zones round it), so a thing within `CRAB_SKIRT` of a crab-sized
         # cluster is part of the crab.
         crabs = [b for b in big if is_crab(b)]
+        kp = pts[kerb_px]
+        jam = bool(((np.abs(kp[:, 1]) < JAM_BAND_M) & (kp[:, 0] < JAM_M)).sum() >= JAM_ZONES) if len(kp) else False
         kept = []
         for d in things:
             sel = d.pop("sel")
@@ -255,4 +337,4 @@ class Sight:
                 thing_px |= sel
             else:
                 crab_px |= sel                                    # a leg
-        return kept, big, (np.concatenate(kerb) if kerb else np.zeros(0, dtype=int)), (thing_px, kerb_px, crab_px)
+        return kept, big, (np.concatenate(kerb) if kerb else np.zeros(0, dtype=int)), (thing_px, kerb_px, crab_px), jam

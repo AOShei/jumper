@@ -64,6 +64,12 @@ class Mapper:
         self.model = None                                    # (ly, lx) -> (v forward, v left) m/s, in place of the
                                                              # stick model below, for a mode measured differently
         self.match_win = MATCH_WIN                           # the scan match's search, m each way
+        self.stall_test = True                               # off for a reckoning that knows when the body moves (the legs):
+                                                             # a thing shoved along fills the picture and never changes, which
+                                                             # this test reads as wedged, and the pose froze through every shove
+        self.decay_s = None                                  # log-odds half-life toward unknown, s (None: never): a room
+                                                             # of things that move is a map of where they were
+        self._known = None                                   # cells `known` set, re-asserted through the decay
 
     # -- frames -------------------------------------------------------------------
     def cell(self, wx, wy):
@@ -101,12 +107,15 @@ class Mapper:
         (tools/race, 2026-10-15): with nothing known the dead-reckoned pose was 0.2-0.4 m
         off within 10 s and the things it remembered doubled up; the kerb is always in
         view and does not move, which is what a landmark is."""
+        if self._known is None:
+            self._known = np.zeros_like(self.grid, dtype=bool)
         for (x0, y0), (x1, y1) in segments:
             n = max(2, int(math.hypot(x1 - x0, y1 - y0) / (RES * 0.5)))
             for x, y in zip(np.linspace(x0, x1, n), np.linspace(y0, y1, n)):
                 r, c = self.cell(float(x), float(y))
                 k = int(math.ceil(thick / RES))
                 self.grid[max(0, r - k): min(N, r + k + 1), max(0, c - k): min(N, c + k + 1)] = CLAMP
+                self._known[max(0, r - k): min(N, r + k + 1), max(0, c - k): min(N, c + k + 1)] = True
 
     def fix(self, name, bx, by, gain=0.5, max_m=1.5):
         """A landmark fix: the mark `name` seen at (bx, by) in the body frame. The pose
@@ -135,6 +144,8 @@ class Mapper:
         sc, sr = int(round(self._carry[0] / RES)), int(round(self._carry[1] / RES))
         if sc or sr:
             self.grid = np.roll(self.grid, (sr, sc), axis=(0, 1))
+            if self._known is not None:
+                self._known = np.roll(self._known, (sr, sc), axis=(0, 1))
             if sr > 0:
                 self.grid[:sr, :] = 0.0                      # (the wrapped edge is unknown again)
             elif sr < 0:
@@ -164,6 +175,10 @@ class Mapper:
             cy, sy = math.cos(self.yaw), math.sin(self.yaw)
             self.x += (cy * v - sy * vy) * dt
             self.y += (sy * v + cy * vy) * dt
+        if self.decay_s and self.last_t is not None:
+            self.grid *= float(np.exp(-math.log(2.0) * (t - self.last_t) / self.decay_s))
+            if self._known is not None:
+                self.grid[self._known] = CLAMP
         self.last_t = t
         self.yaw = senses.yaw
         # the body's own cells, freed every step (before the frame test: a step without a
@@ -192,7 +207,7 @@ class Mapper:
         # at least STALL_COLS of them in view: an empty picture says nothing.
         cols = np.where(obj, pts[:, 0], np.inf).reshape(ROWS, COLS).min(axis=0)
         walking = abs(ly) >= DEAD_BAND or abs(lx) >= DEAD_BAND
-        if self._cols is not None and walking:
+        if self._cols is not None and walking and self.stall_test:
             both = np.isfinite(cols) & np.isfinite(self._cols)
             if both.sum() >= STALL_COLS and float(np.median(np.abs(cols[both] - self._cols[both]))) < STALL_M:
                 if self._still_t is None:
