@@ -123,10 +123,9 @@ JAM_INTO_M_S = 0.05                                        # at the kerb, a leg 
 #: 0.56 m/s the slipping feet report.)
 CORNER_M = 0.5                                             # a kerb point within this of a corner is left out of the wall fix
                                                            # (the chamfer's points belong to neither wall)
-DEEP_WEIGHT = 2.0                                          # m of walk a thing SAVES per metre it stands from the line, when
-                                                           # picking: the deepest in the other half first (Andrew: "crabs
-                                                           # should prioritize removing objects that are deepest into their
-                                                           # territory for starters"); the walk is the tiebreak
+#: (DEEP_WEIGHT, 2 m of walk saved per metre from the line, was the pick's whole order
+#: before the hierarchy: it sent red from a pile of four at the line to a lone thing on
+#: the far side, day30.)
 STAND_MOVED_M = 0.3                                        # a standing point, once chosen, is kept for the job unless it
                                                            # stops fitting or the thing moves this far: re-choosing it
                                                            # (every 1.5 s before) flipped the slant's side and sent the
@@ -183,6 +182,18 @@ WALL_GROW_M_S, WALL_NEAR_MAX = 0.15, 1.2                   # ...growing by this 
                                                            # this, so a pose that ran off while the kerb was hidden is
                                                            # pulled back
 WALL_MIN_PTS = 10                                          # per wall, for a fix...
+CORNER_OFF_M, CORNER_MIN_PTS = 0.08, 8                     # a kerb point this far off a seen wall's line into the room, short
+                                                           # of the chamfer's depth, is on the chamfer; this many of them
+                                                           # agreeing on the corner within...
+CORNER_TOL_M, CORNER_RUN_M = 0.06, 0.12                    # ...this, over a run of at least this along the chamfer, fix the
+                                                           # pose along the wall
+CORNER_MAX_M = 0.8                                         # a corner residual beyond this is the other corner's (the end
+                                                           # wall's two are 1.7 m apart)
+YAW_ALONG_M, YAW_RANGE_M = 0.8, 0.5                        # a wall seen over this much of its length, from this far, fixes
+                                                           # the heading from its slant...
+YAW_GAIN, YAW_STEP, YAW_MAX = 0.1, math.radians(0.05), math.radians(8)   # ...this much of it, no more than this a frame
+                                                           # (2.5 deg/s: the gyro drifts well under 0.1 deg/s), and only a
+                                                           # slant within this: a larger one is something else
 WALL_ALONG_M, WALL_ACROSS_M = 0.30, 0.06                   # ...spread at least this far along the wall and no more than
                                                            # this (median absolute deviation) across it: a wall is a line
 ON_WALL_M = 0.05                                           # a sighting nearer a kerb line than this is not a thing (a ball
@@ -215,7 +226,24 @@ def stick_model(ly: float, lx: float) -> tuple[float, float]:
 
 def claw_model(ly: float, lx: float) -> tuple[float, float]:
     return -CLAW_FWD_PER * ly, -CLAW_SIDE_PER * lx
-MATCH_M = 0.30                                             # a sighting within this of a remembered thing is that thing
+MATCH_M = 0.15                                             # a sighting within this of a remembered thing is that thing (0.30
+                                                           # collapsed neighbours into one memory: the things are 16-19 cm
+                                                           # wide, so two side by side are 20-25 cm apart, and a pile of
+                                                           # three touching was remembered as ONE thing of 131 sightings,
+                                                           # probe_pile; a pile of four at the line was "2 on the wrong
+                                                           # half", day30)
+EXPECT_M = 0.30                                            # a cluster within this of a remembered thing stays a thing whatever
+                                                           # the frame's gates say (the tracking's anti-flicker)
+PAIR_W = 0.22                                              # a sighting wider than this is two things in one cluster
+WALKS_M, WALKS_S = 0.30, 1.0                               # a memory that moves this far in this long walks: the other crab
+                                                           # (a thing moves only under a nose)
+CLUSTER_M = 0.45                                           # things this near each other are a cluster: picked first, the
+                                                           # most things for one walk (Andrew: "clusters of multiple objects
+                                                           # first since they are highest value")
+BACK_M = 1.2                                               # a thing this far from the line is the back row: picked next,
+                                                           # the dearest to fetch and the other crab's for free if left
+                                                           # (Andrew: "2-3 objects scattered on the backend that never get
+                                                           # serviced")
 FORGET_S = 1.0                                             # a remembered thing in plain view for this long with no sighting is gone
                                                            # (2 s had the crabs walking at ghosts of things long shoved,
                                                            # Andrew: "target a ghost object that is no longer there")
@@ -303,6 +331,8 @@ class Senses:
         self.mapper.match_win = MATCH_WIN_M
         self.mapper.stall_test = not LEG_ODOM
         self.once = 0                                      # things remembered from one sighting and forgotten
+        self.hold = None                                   # the pilot's target: the one memory allowed to move
+        self.walked = []                                   # (x, y, t) where a memory walked off: the other crab
         self._feet = None                                  # (feet, stance) last step, for the leg odometry
         self.leg_v = (0.0, 0.0)
         hx, hy, c = ROOM_X / 2, ROOM_Y / 2, CHAMFER       # the kerb: the room the crab was put in, known
@@ -319,7 +349,8 @@ class Senses:
         self.mapper.decay_s = MAP_DECAY_S
         self.blocked = False                               # the other crab right ahead this frame
         self.jammed = False                                # the kerb at the nose
-        self.fixes = [0, 0, 0, 0]                          # fixes landed per wall (+x, -x, +y, -y), for the log
+        self.fixes = [0, 0, 0, 0, 0, 0]                    # fixes landed per wall (+x, -x, +y, -y), on a corner, on the
+                                                           # heading, for the log
         self.kerb_frames = 0                               # frames with kerb points at all
         self.foe_w = None                                  # where the other crab was last seen, world
 
@@ -344,7 +375,7 @@ class Senses:
         near_m = min(WALL_NEAR_MAX, WALL_NEAR_M + WALL_GROW_M_S * (t - self.last_fix))
         in_corner = (np.abs(wx) > hx - CORNER_M) & (np.abs(wy) > hy - CORNER_M)
         near = (dists[np.arange(len(wall)), wall] < near_m) & ~in_corner
-        dx_terms, dy_terms = [], []
+        dx_terms, dy_terms, yaw_terms = [], [], []
         for w, (coord, along, target) in enumerate(((wx, wy, hx), (wx, wy, -hx), (wy, wx, hy), (wy, wx, -hy))):
             sel = near & (wall == w)
             if sel.sum() < WALL_MIN_PTS:
@@ -357,9 +388,41 @@ class Senses:
                 continue
             (dx_terms if w < 2 else dy_terms).append((target - med, int(sel.sum())))
             self.fixes[w] += 1
-        # (The chamfers were tried as walls too, for the x a crab working along a side
-        # wall gets no fix on: a short stretch of side wall near a corner passed the
-        # chamfer's line test with a wrong residual and the pose jumped 1.2 m, day21.)
+            # The heading from the wall's slant: the gyro's yaw walked 6-8 degrees off in
+            # 100 s (day31b, red), which puts a corner 2 m off by 0.25 m along the wall
+            if float(np.ptp(along[sel])) >= YAW_ALONG_M and float(np.median(np.hypot(pts[sel, 0], pts[sel, 1]))) >= YAW_RANGE_M:
+                b = float(np.polyfit(along[sel], c, 1)[0])
+                e = math.atan(b) if w >= 2 else -math.atan(b)
+                if abs(e) <= YAW_MAX:
+                    # (a slant beyond YAW_MAX is not the heading: the kerb at a slant under the
+                    # nose, or a chamfer taken for a wall, said 45 degrees, and at 0.5 degrees a
+                    # frame blue's heading ran away to -104 degrees in 40 s, day32b)
+                    yaw_terms.append((e, int(sel.sum())))
+            # The wall's END: the chamfer's points lie off the wall's line, into the room,
+            # at 45 degrees, so each one says where the corner is along the wall (along
+            # minus across, or plus, by the end), and that corner is at a known place --
+            # the fix along the wall that a crab working beside one side wall otherwise
+            # has nothing for (0.9-1.0 m off in x, three times in six runs, day29-day31).
+            # Geometry in the frame of the wall seen, not the pose's corner box: taking the
+            # chamfers as walls in that box jumped the pose 1.2 m when a stretch of side
+            # wall near a corner passed the chamfer's line test (day21).
+            across_all = (target - coord) if target > 0 else (coord - target)
+            on_chamfer = (across_all > CORNER_OFF_M) & (across_all < CHAMFER - 0.05)
+            if on_chamfer.sum() >= CORNER_MIN_PTS:
+                best = None
+                for end in (1.0, -1.0):
+                    a_end = along[on_chamfer] - end * across_all[on_chamfer]
+                    med_e = float(np.median(a_end))
+                    inl = np.abs(a_end - med_e) < CORNER_TOL_M
+                    if inl.sum() >= CORNER_MIN_PTS and float(np.ptp(across_all[on_chamfer][inl])) >= CORNER_RUN_M \
+                            and (best is None or inl.sum() > best[2]):
+                        best = (end, med_e, int(inl.sum()))
+                if best is not None:
+                    end, med_e, n_e = best
+                    known = end * ((hy if w < 2 else hx) - CHAMFER)
+                    if abs(known - med_e) < CORNER_MAX_M:
+                        (dy_terms if w < 2 else dx_terms).append((known - med_e, n_e))
+                        self.fixes[4] += 1
         dx = sum(d * n for d, n in dx_terms) / sum(n for _, n in dx_terms) if dx_terms else 0.0
         dy = sum(d * n for d, n in dy_terms) / sum(n for _, n in dy_terms) if dy_terms else 0.0
         clip = lambda v: max(-WALL_STEP_M, min(WALL_STEP_M, WALL_GAIN * v))
@@ -370,14 +433,18 @@ class Senses:
             if max(abs(dx), abs(dy)) < WALL_NEAR_M * 0.5:
                 self.last_fix = t
             self.mapper.shift(clip(dx), clip(dy))
+        if yaw_terms:
+            e = sum(d * n for d, n in yaw_terms) / sum(n for _, n in yaw_terms)
+            self.sight.yaw -= max(-YAW_STEP, min(YAW_STEP, YAW_GAIN * e))
+            self.fixes[5] += 1
 
     def expected(self, bx: float, by: float) -> bool:
-        """Whether a remembered thing (seen twice, lately) is within MATCH_M of a point
+        """Whether a remembered thing (seen twice, lately) is within EXPECT_M of a point
         in the base frame: the sensing keeps a cluster there a thing."""
         wx, wy = self.mapper.to_world(np.array([[bx, by]]))
         wx, wy = float(wx[0]), float(wy[0])
         t = self.sight.last["t"] if self.sight.last is not None else 0.0
-        return any(th["n"] >= 2 and t - th["seen"] < 2.0 and math.hypot(th["x"] - wx, th["y"] - wy) < MATCH_M
+        return any(th["n"] >= 2 and t - th["seen"] < 2.0 and math.hypot(th["x"] - wx, th["y"] - wy) < EXPECT_M
                    for th in self.things.values())
 
     def at_wall(self, bx: float, by: float, within: float = 0.12) -> bool:
@@ -460,6 +527,7 @@ class Senses:
             return
         self.wall_fix()
         seen = set()
+        sightings = []
         for d in self.sight.last["things"]:
             wx, wy = self.mapper.to_world(np.array([[d["x"], d["y"]]]))
             wx, wy = float(wx[0]), float(wy[0])
@@ -469,24 +537,56 @@ class Senses:
                                                            # (things at x -2.00, the deepest of all, were picked and "not
                                                            # there"; one remembered at y -1.44, beyond the wall, was
                                                            # walked at, probe_fix13_chamfer)
-            best, best_d = None, MATCH_M
-            for name, th in self.things.items():
-                dist = math.hypot(th["x"] - wx, th["y"] - wy)
-                if dist < best_d:
-                    best, best_d = name, dist
-            if best is None:
+            sightings.append((wx, wy, d["width"]))
+        # one memory per sighting and one sighting per memory, nearest pair first: two
+        # sightings at a pile both landed on the one memory nearest them (probe_pile)
+        pairs = sorted((math.hypot(th["x"] - wx, th["y"] - wy), i, name)
+                       for i, (wx, wy, _) in enumerate(sightings) for name, th in self.things.items())
+        matched = {}
+        for dist, i, name in pairs:
+            if dist >= MATCH_M:
+                break
+            if i not in matched and name not in seen:
+                matched[i] = name
+                seen.add(name)
+        fresh_w = []
+        for i, (wx, wy, width) in enumerate(sightings):
+            name = matched.get(i)
+            if name is None:
+                if any(math.hypot(fx - wx, fy - wy) < MATCH_M for fx, fy in fresh_w):
+                    continue                               # one thing in two clusters this frame (its face and its top)
                 self._n += 1
-                best = f"thing{self._n}"
-                self.things[best] = {"name": best, "kind": "thing", "x": wx, "y": wy, "seen": t, "first": t, "n": 0,
-                                     "viewed": None}
-            th = self.things[best]
-            th["x"], th["y"] = 0.5 * th["x"] + 0.5 * wx, 0.5 * th["y"] + 0.5 * wy
+                name = f"thing{self._n}"
+                self.things[name] = {"name": name, "kind": "thing", "x": wx, "y": wy, "trail": [(wx, wy, t)],
+                                     "seen": t, "first": t, "n": 0, "viewed": None}
+                fresh_w.append((wx, wy))
+                seen.add(name)
+            th = self.things[name]
+            if width <= PAIR_W or th["n"] < PICK_SEEN_N:
+                # (a sighting wider than one thing is two of them in one cluster: it says the
+                # thing is there, not where, or it drags its memory toward the neighbour's)
+                th["x"], th["y"] = 0.5 * th["x"] + 0.5 * wx, 0.5 * th["y"] + 0.5 * wy
             th["seen"], th["n"] = t, th["n"] + 1
-            seen.add(best)
+            if t - th["trail"][-1][2] >= WALKS_S / 2:
+                th["trail"] = [q for q in th["trail"] if t - q[2] <= WALKS_S] + [(th["x"], th["y"], t)]
+            x1, y1, t1 = th["trail"][0]
+            if name != self.hold and t - t1 >= WALKS_S * 0.9 and math.hypot(th["x"] - x1, th["y"] - y1) > WALKS_M:
+                # it walks: the other crab, which at range is a low cluster the size of a thing
+                # (blue walking to its corner left memories along its way and red picked them
+                # as a cluster, probe_pile3). Not my target, which moves under my nose; and a
+                # pile's memories wander as its clusters merge and split, 0.25 m over 6 s
+                # (probe_pile4), so it is the speed that tells
+                self.walked.append((th["x"], th["y"], t))
+                del self.things[name]
+                seen.discard(name)
         crabs = [c for c in self.sight.last["big"] if is_crab(c) and not c.get("kerb")]
         for name in list(self.things):
             th = self.things[name]
-            if name in seen:
+            if name in seen or any(math.hypot(th["x"] - wx, th["y"] - wy) < EXPECT_M for wx, wy, _ in sightings):
+                # seen, or a sighting is near enough to be it and went to a neighbour: two
+                # things touching come out as one cluster some frames (0.21 wide at 2.5 m,
+                # probe_pile2), and with one sighting a frame the other memory starved and
+                # was forgotten in the second
                 th["viewed"] = None
                 continue
             bx, by = self.mapper.to_body(th["x"], th["y"])
@@ -698,13 +798,29 @@ def make_pilot(env, player, side):
                 st["intent"], st["stage"], st["since"] = "search", "going to look", t
                 log(t, "nothing remembered on the wrong half: goes to look")
             return
-        # nearest first, by the walk to its approach point; a thing seen lately over one remembered
-        best = min(todo, key=lambda o: math.hypot(o["x"] - sign * -BEHIND_M - x, o["y"] - y)
-                   + STALE_WEIGHT * (t - o.get("seen", t)) - DEEP_WEIGHT * abs(o["x"]))
+        # The hierarchy (Andrew, 2026-10-16): a cluster first, the biggest, since it is the most
+        # things for one walk; then the back row, the dearest to fetch and the other crab's for
+        # free if left (on nearest-first 2-3 things at the back were never serviced); then the
+        # nearest. Within a tier the shortest walk to the standing point (behind the thing,
+        # on the far side of it from my half), a thing seen lately over one remembered.
+        def walk(o):
+            return math.hypot(o["x"] - sign * BEHIND_M - x, o["y"] - y) + STALE_WEIGHT * (t - o.get("seen", t))
+
+        def mass(o):
+            return sum(1 for q in todo if q is not o and math.hypot(q["x"] - o["x"], q["y"] - o["y"]) < CLUSTER_M)
+        hot = {o["name"]: mass(o) for o in todo}
+        top = max(hot.values())
+        if top >= 1:
+            best = min((o for o in todo if hot[o["name"]] == top), key=walk)
+            tier = f"a cluster of {top + 1}"
+        else:
+            back = [o for o in todo if abs(o["x"]) > BACK_M]
+            best = min(back or todo, key=walk)
+            tier = "the back row" if back else "the nearest"
         st["target"], st["target_w"] = best, (best["x"], best["y"])
         st["intent"], st["stage"], st["since"], st["job_since"] = "approach", f"to the {best['kind']}", t, t
         st["still_since"] = None
-        log(t, f"after the {best['kind']} at ({best['x']:+.2f}, {best['y']:+.2f}), {len(todo)} on the wrong half")
+        log(t, f"after the {best['kind']} at ({best['x']:+.2f}, {best['y']:+.2f}), {len(todo)} on the wrong half: {tier}")
 
     def wall_route(o, held=None):
         """For a thing within WALL_ROUTE_M of the kerb: the heading that shoves it along
@@ -822,6 +938,8 @@ def make_pilot(env, player, side):
 
     def act(t):
         st["t_now"] = t
+        if not side.truth:
+            eyes.hold = st["target"]["name"] if st["target"] is not None else None
         x, y, yaw = eyes.pose()
         intent = st["intent"]
         if intent is None or intent == "done":
@@ -1062,10 +1180,10 @@ def make_pilot(env, player, side):
             fx = eyes.fixes
             print(f"\n[{label}] {t:6.2f}s  map pose off by ({ex:+.2f}, {ey:+.2f}) m, {math.degrees(eyaw):+.0f} deg; "
                   f"{len(eyes.things)} things remembered; kerb in {eyes.kerb_frames} frames, fixes +x {fx[0]} -x {fx[1]} "
-                  f"+y {fx[2]} -y {fx[3]}; {eyes.once} seen once and forgotten"
+                  f"+y {fx[2]} -y {fx[3]} corner {fx[4]} heading {fx[5]}; {eyes.once} seen once and forgotten"
                   + (", stalled" if eyes.mapper.stalled else "") + (", blocked" if eyes.blocked else "")
                   + (", jammed" if eyes.jammed else ""))
-            eyes.fixes = [0, 0, 0, 0]
+            eyes.fixes = [0, 0, 0, 0, 0, 0]
             eyes.kerb_frames = 0
         frame = _pilot(t)
         st["frame"] = frame
@@ -1107,4 +1225,5 @@ def make_pilot(env, player, side):
     pilot.state = st
     pilot.senses = getattr(eyes, "sight", None)
     pilot.mapper = getattr(eyes, "mapper", None)
+    pilot.eyes = eyes
     return pilot

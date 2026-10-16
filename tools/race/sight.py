@@ -41,7 +41,16 @@ OBJECT_HEIGHT = (0.03, 0.14)      # m above the floor, the cluster's tallest poi
                                   # does obscure the full view it must be a wall"; before, a 17 cm ball at 10 cm read
                                   # as wall and the wall fix pulled the pose 2 m onto it, day17, and a kerb from close
                                   # up read as a thing until the map was asked)
-OBJECT_WIDTH = (0.03, 0.26)       # m across (a crab is 0.3-0.5, the kerb is the picture's width)
+OBJECT_WIDTH = (0.07, 0.26)       # m across (a crab is 0.3-0.5, the kerb is the picture's width). The floor of
+                                  # 0.07 is for the other crab's legs when its body is lost in the kerb behind it:
+                                  # at 1.5 m they are four clusters of 4-6 zones, 0.03-0.05 wide and 0.08 tall,
+                                  # and they were remembered as a cluster of four things and picked first; a thing
+                                  # at 1.9 m is 5 zones and 0.10 wide (probe_pile4)
+PILE_W = 0.17                     # m: one thing's share of a pile's width (pucks 19 and 16, balls 12)
+PILE_SPLIT = 0.24                 # m across or deep, a low cluster is a pile and is cut: one thing spans 0.23 at
+                                  # most (a 16 cm square on its diagonal); two touching read 0.21-0.34 wide by the
+                                  # angle, and under OBJECT_WIDTH's 0.26 they were one sighting, which pulled their
+                                  # two memories together until they merged (probe_pile3)
 CRAB_SKIRT = 0.45                 # m round a crab-sized cluster: the small clusters there are its legs
 CRAB_HEIGHT = (0.14, 0.27)        # a crab's shell is 0.15-0.20 up; the kerb starts where a crab ends
 CRAB_DEPTH = 0.12                 # m front to back in the picture: a crab's legs spread, a thing's face does not
@@ -281,6 +290,28 @@ class Sight:
                      "thing_px": vote[0], "kerb_px": vote[1], "crab_px": vote[2]}
         return True
 
+    @staticmethod
+    def _pile(sel: np.ndarray, pts: np.ndarray, width: float) -> list[np.ndarray]:
+        """A wide low cluster cut into round(width / PILE_W) pieces: k-means on the zones'
+        floor positions, started as even slices across the cluster."""
+        k = max(2, round(width / PILE_W))
+        idx = np.flatnonzero(sel)
+        p = pts[idx, :2]
+        order = np.argsort(p[:, 1])
+        centres = np.stack([p[order[len(order) * i // k:len(order) * (i + 1) // k]].mean(axis=0) for i in range(k)])
+        for _ in range(8):
+            lab = np.argmin(((p[:, None, :] - centres[None, :, :]) ** 2).sum(axis=2), axis=1)
+            for i in range(k):
+                if (lab == i).any():
+                    centres[i] = p[lab == i].mean(axis=0)
+        out = []
+        for i in range(k):
+            if (lab == i).sum() >= 3:
+                piece = np.zeros(len(sel), dtype=bool)
+                piece[idx[lab == i]] = True
+                out.append(piece)
+        return out
+
     def _things(self, obj: np.ndarray, pts: np.ndarray, h: np.ndarray, seen: int = ROWS * COLS):
         """The clusters that are object-sized, each with its position in the base
         frame (x ahead, y left: the nearest face's median), and the ones that are not
@@ -289,10 +320,7 @@ class Sight:
         labels, n = self._split_proud(labels, n, pts, h)
         things, big, kerb = [], [], []
         thing_px, kerb_px, crab_px = (np.zeros(ROWS * COLS, dtype=bool) for _ in range(3))
-        for k in range(1, n + 1):
-            sel = (labels == k).ravel()
-            if sel.sum() < 3:
-                continue
+        def cluster(sel):
             p = pts[sel]
             top, width = float(h[sel].max()), float(np.ptp(p[:, 1]))
             cols_ = np.nonzero(sel.reshape(ROWS, COLS).any(axis=0))[0]
@@ -303,14 +331,22 @@ class Sight:
             cx, cy = float(np.median(p[:, 0])), float(np.median(p[:, 1]))
             d = {"x": cx, "y": cy, "near": near, "height": top, "width": width, "n": int(sel.sum()), "edge": edge,
                  "depth": float(np.ptp(p[:, 0])), "bearing": float(math.atan2(cy, cx)), "range": float(math.hypot(cx, cy))}
+            return d, top_cut
+
+        for k in range(1, n + 1):
+            sel = (labels == k).ravel()
+            if sel.sum() < 3:
+                continue
+            d, top_cut = cluster(sel)
+            near, cx, cy = d["near"], d["x"], d["y"]
             close = near < NEAR_M
-            tall = top_cut or top > OBJECT_HEIGHT[1]
+            tall = top_cut or d["height"] > OBJECT_HEIGHT[1]
             if tall:
                 # not a thing, whatever is remembered there: the kerb (from close up it shows
                 # only the band inside the picture, 8-19 cm up at 15 cm, but runs out of the
                 # picture's top, which no thing does) or the other crab
                 big.append(d)
-                if (top >= KERB_MIN and sel.sum() >= 15) or \
+                if (d["height"] >= KERB_MIN and sel.sum() >= 15) or \
                         (top_cut and (near >= CRAB_CUT_M or (self.at_wall is not None and self.at_wall(cx, cy)))):
                     kerb.append(np.flatnonzero(sel))
                     kerb_px |= sel
@@ -318,20 +354,30 @@ class Sight:
                 elif is_crab(d):
                     crab_px |= sel
                 continue
-            if self.expected is not None and self.expected(cx, cy):
-                # tracked already: this frame's gates do not get to drop it (a thing flickered
-                # between thing and wall frame to frame, Andrew: "make the tracking of the
-                # objects more reliable and less noisy")
-                things.append(d)
-                d["sel"] = sel
-                continue
-            if OBJECT_HEIGHT[0] <= top and (close or (OBJECT_WIDTH[0] <= width <= OBJECT_WIDTH[1] and not edge)):
-                things.append(d)
-                d["sel"] = sel
-            else:
-                big.append(d)
-                if is_crab(d):
-                    crab_px |= sel
+            pieces = [(d, sel)]
+            if not close and max(d["width"], d["depth"]) > PILE_SPLIT:
+                # a pile: things touching come out as one low cluster as wide as all of them,
+                # and as wide as that it is no thing (three touching at 1 m read as one of
+                # width 0.34 and were remembered as ONE thing, probe_pile; a pile of four at
+                # the line was left for a lone thing on the far side, day30). Cut into as
+                # many pieces as things of PILE_W fit across it.
+                pieces = [cluster(s)[:1] + (s,) for s in self._pile(sel, pts, max(d["width"], d["depth"]))]
+            for d, sel in pieces:
+                if self.expected is not None and self.expected(d["x"], d["y"]):
+                    # tracked already: this frame's gates do not get to drop it (a thing flickered
+                    # between thing and wall frame to frame, Andrew: "make the tracking of the
+                    # objects more reliable and less noisy")
+                    things.append(d)
+                    d["sel"] = sel
+                    continue
+                if OBJECT_HEIGHT[0] <= d["height"] and \
+                        (close or (OBJECT_WIDTH[0] <= d["width"] <= OBJECT_WIDTH[1] and not d["edge"])):
+                    things.append(d)
+                    d["sel"] = sel
+                else:
+                    big.append(d)
+                    if is_crab(d):
+                        crab_px |= sel
         # The other crab's legs come out as small clusters beside its big one (probe_sight,
         # 2026-10-15: a crab at 0.26 m is one cluster of 1371 zones, 0.20 m tall, with
         # leg pieces of 3-5 zones round it), so a thing within `CRAB_SKIRT` of a crab-sized

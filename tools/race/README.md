@@ -18,7 +18,7 @@ would be nice and maybe some other shapes as well."
 | `room.py` | the rink: two crabs on a painted floor with a kerb, the line at x = 0, the mirrored layout of cubes, balls, cans and pucks |
 | `referee.py` | the count on each half (ground truth, the referee's alone), the clock, the winner's dance |
 | `sight.py` | one crab's dToF reading: the clusters that are object-sized, the kerb's points, the other crab |
-| `pilots/sweeper.py` | the pilot: remember things, pick the nearest on the wrong half, get behind it, shove it over; `--red-truth` makes it read the world instead |
+| `pilots/sweeper.py` | the pilot: remember things, pick on the wrong half (a cluster first, then the back row, then the nearest), get behind it, shove it over; `--red-truth` makes it read the world instead |
 | `hud.py` | the readout in each top corner: depth image (grey by range; blue the crab's own legs and claws, red the things, yellow the kerb, magenta the other crab), map with the plan and the remembered things, the pad; the score and clock across the top |
 | `race.py` | the runner: two `AppPlayer`s on one app, as `tools/battle/duel.py` |
 
@@ -99,8 +99,14 @@ IMU's up (1.3 cm over the floor at rest, probe_sight; a zone is off the floor
 from 3 cm plus 2.5 cm per metre of range, since a 1.4 degree tilt of the plane
 put the floor a metre out 2.5 cm up and it read as low things at the kerb's
 foot, picked twice in a probe), the object clusters
-(depth-connected, 3-14 cm tall, 3-26 cm across, not touching the picture's
-edge), the other crab (14-27 cm tall, over 26 cm wide and over 12 cm deep: its
+(depth-connected, 3-14 cm tall, 7-26 cm across, not touching the picture's
+edge; the floor of 7 cm is the other crab's legs when its body is lost in the
+kerb behind it, four clusters 3-5 cm wide at 1.5 m that were remembered as a
+cluster of four things, where a thing at 1.9 m is 10 cm wide, probe_pile4; a
+low cluster over 24 cm across or deep is a pile of things touching, cut into
+as many pieces as 17 cm things fit in it -- as one cluster it was no thing
+at all beyond contact range, and a pile of four at the line went unremembered
+while red left for the far side, day30), the other crab (14-27 cm tall, over 26 cm wide and over 12 cm deep: its
 legs spread front to back where a thing shows only its face), the kerb (anything
 27 cm or taller: at 10 cm it was a two-zone sliver at range told from a cube by
 width alone, and the crabs lost it), and the small clusters within 0.45 m of a
@@ -115,7 +121,14 @@ out and clustered on their own, by depth -- by adjacency, two cubes side by side
 came out as one wide low cluster and read as a crab (day12).
 
 Things seen are remembered in the map's frame, matched sighting to sighting
-within 0.3 m -- and a cluster within 0.3 m of a remembered thing stays a thing
+within 0.15 m, one sighting to one memory, nearest pair first (within 0.3 m
+and nearest-wins, the things being 16-19 cm wide, two side by side were one
+memory: a pile of three touching was one thing of 131 sightings, probe_pile).
+A sighting wider than one thing (22 cm: two in one cluster at an angle) says
+its memory is there but does not move it, since it dragged the two memories
+together until they merged. A memory that moves 0.3 m in a second is the
+other crab, seen at range as a low cluster the size of a thing, and is
+dropped; the target is allowed to move -- and a cluster within 0.3 m of a remembered thing stays a thing
 whatever this frame's gates say of it, short of kerb height, so the tracking
 does not flicker between thing and wall from frame to frame (the overlay's
 colours are a majority of the last three frames for the same reason) -- forgotten after 1 s in plain view with no sighting (not when the other
@@ -195,11 +208,34 @@ most and the floor shows past it. The kerb from 0.3 m at a slant is crab-sized
 inside the picture too (top 0.26, 0.37 wide, 0.29 deep) and read as the other
 crab on a corner shove; a cluster flagged kerb is never the crab.
 
-Still open: a crab working along a side wall gets no fix on x until an end
-wall is in view again, and drifts up to 0.4-0.8 m meanwhile (the legs read a
-shove under load a little short). Taking the chamfers as walls too was tried
-for that and reverted: a short stretch of side wall near a corner passed the
-chamfer's line test with a wrong residual and the pose jumped 1.2 m (day21).
+A crab working along a side wall had no fix on x until an end wall was in
+view again, and drifted 0.4-1.0 m meanwhile (the legs read a shove under load
+a little short, and a walk to the far corner ran 0.6 m off in 5 s, day31b;
+0.9-1.0 m three times in six runs, day29-day31). Taking the chamfers as walls
+too was tried for that and reverted: a short stretch of side wall near a
+corner passed the chamfer's line test with a wrong residual and the pose
+jumped 1.2 m (day21). The fix is the wall's END: the chamfer's points lie off
+a seen wall's line into the room at 45 degrees, so each one says where the
+corner is along the wall (its along-coordinate minus its distance off the
+line, or plus, by the end), and that corner is at a known place. Eight points
+within 6 cm of one answer over a 12 cm run of the chamfer give a residual
+along the wall, weighted like a wall's; it is geometry in the seen wall's
+frame, not the pose's corner box, which is what the day21 attempt had wrong.
+The heading comes from the same wall: the gyro's yaw walked 6-8 degrees off
+in 100 s (red, day31b), which puts a corner 2 m off by 0.25 m along the wall,
+so a wall seen over 0.8 m of its length from 0.5 m or more corrects the
+heading from its slant, a tenth of it and 0.05 degrees a frame at most (2.5
+degrees a second, well over the gyro's drift), and only a slant within 8
+degrees: a larger one is something else. At 0.3 of it and 0.5 degrees a
+frame, with no bound, the kerb at a slant under the nose said 45 degrees and
+blue's heading ran away to -104 degrees in 40 s, its pose 1.7 m off, red
+12-0 (day32b). Knocked 0.4 m in x and 6 degrees while searching beside the
+-y wall, the pose is back within 1 cm inside a second and the heading
+within 0.1 degrees in three (probe_xfix: corner fixes 30-100 a second
+whenever a chamfer is in the picture; a 0.8 m, 10 degree knock closes the
+same way), and a 0.16 m drift during a shove beside the wall was pulled
+back within the shove. Still open: no chamfer in the
+picture, no x fix -- a side wall seen square-on from the middle of the room.
 
 The map's cells decay toward unknown with a 6 s half-life, the known kerb
 re-asserted, so a thing shoved away leaves no obstacle for the planner to route
@@ -291,8 +327,17 @@ go for it"). A thing with no standing point at all -- no leg of a wall
 route and no slant the body fits in, a puck on the chamfer's face 0.23 m
 from the end wall -- is given up for 20 s rather than circled for 10
 (probe_fix10_chamfer; before, the last resort was the point straight behind
-clamped into the room, which lay on the thing). The things deepest in the
-other half are picked first.
+clamped into the room, which lay on the thing). The pick is a hierarchy
+(Andrew, 2026-10-16): a cluster first, the biggest -- things within 0.45 m of
+each other, the most things for one walk -- then the back row, over 1.2 m
+from the line, the dearest to fetch and the other crab's for free if left (on
+nearest-first, two or three things at the back were never serviced), then
+the nearest; within a tier the shortest walk to the standing point, a fresh
+sighting over a stale memory. Before, the deepest thing first at 2 m of walk
+per metre: it sent red from a pile of four at the line to a lone thing on
+the far side (day30). The pile probe (three things touching 1 m ahead, a
+lone puck at the back, blue parked in its corner) picks the pile as a
+cluster of three, has two of it over in 11 s, then goes to the back row.
 
 While a crab shoves, the thing fills the sensor's whole picture and no wall is
 in view, so the pose runs on the dead reckoning alone for the length of the
@@ -429,6 +474,11 @@ would work needs something it can take: a 5 cm prize object, or a handle.
 | day29 (seed 5, three runs of one code: the octagon kerb, a thing picked once seen twice) | sensed | 120 s | blue 7-5, red 7-5, blue 9-3 | 93, 102, 100 | 27, 32, 30 shoves; 25, 24, 18 give-ups, of them 7, 13, 5 "not there" -- the same code three times is the spread on one seed, so a change is judged on two runs from here; the one-frame sightings refused 10-13 a crab, none of them a give-up; poses means 5-11 cm, worst 0.89 (blue, 15 s, no x fix along the -y wall) |
 | day30b (seed 5, the plain-view clock) | sensed | 120 s | blue 9-3 | 106 | 33 shoves, 13 give-ups: 3 "other crab", 5 "not there" (each checked: the nearest thing truly 0.4-1.4 m from the memory), 5 with no standing point; poses means 5 and 7 cm, worst 0.21 and 0.30 |
 | day30 (seed 5, the plain-view clock, the film take) | sensed | 120 s | blue 7-5 | 91 | 24 shoves, 28 give-ups: 17 "other crab" (the pick's foe rule, next), 6 "not there" (checked, truly gone), 4 with no standing point, 1 at the kerb three times; poses means 5 and 14 cm, blue 0.97 m off in x from 15 to 20 s on its first shove along the -y wall (the second run of five with ~0.9 m there: no x fix along a side wall) |
+| day31 (seed 5, the hierarchy, piles as their members, the film take) | sensed | 120 s | red 7-5 | 124 | 25 shoves, 27 give-ups: 17 "other crab" (both crabs now go for the same clusters by the line), 8 "not there" (checked, truly gone), 1 with no standing point; picks: 21 clusters (18 of two, 2 of three, 1 of four), 12 back row, 30 nearest; poses means 9 and 8 cm, worst 0.38 and 0.45 |
+| day31b (seed 5, the same code) | sensed | 120 s | blue 10-2 | 82 | 23 shoves, 25 give-ups: 8 "other crab", 8 "not there", 8 with no standing point, 1 jam; picks: 22 clusters, 14 back row, 21 nearest; red's pose 0.99 m off in x at 105 s after a walk along the -y wall to the far corner, and with it a stale memory held 15 s and three back-row things refused as having no room (the pose put them in the wall): the side-wall x fix is what the back-row tier needs |
+| day32, day32b (seed 5, the corner fix and an unbounded heading fix) | sensed | 120 s | blue 7-5, red 12-0 | 58, 42 | the heading fix at 0.3 of the slant and 0.5 degrees a frame with no bound ran away: headings +41 and -104 degrees, blue's pose 1.7 m off, both runs discarded (see Localisation) |
+| day33 (seed 5, the corner fix, the heading fix bounded, the film take) | sensed | 120 s | blue 9-3 | 84 | 23 shoves, 24 give-ups: 9 "other crab", 9 "not there", 3 with no standing point, 3 circled; picks: 27 clusters, 8 back row, 15 nearest; poses means 6 and 6 cm, worst 0.21 and 0.30, headings within 4 degrees all race |
+| day33b (seed 5, the same code) | sensed | 120 s | red 8-4 | 88 | 25 shoves, 34 give-ups: 18 "other crab", 9 "not there", 4 with no standing point; poses means 2 and 7 cm, worst 0.11 (red, the best of any run) and 0.45, headings within 2 degrees; 9700 corner fixes and 7800 heading fixes landed |
 
 Objects shoved deep into a half end up against the far kerb, where the other
 crab can only get beside them, not behind: the slanting approaches handle it
