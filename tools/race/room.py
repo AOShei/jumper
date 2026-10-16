@@ -209,8 +209,12 @@ def _floor_texture(spec: Any) -> None:
     rng = np.random.default_rng(5)
     img *= (1.0 + 0.03 * rng.standard_normal((ny, n, 1)))                # a little grain, so the floor is not a flat card
     img[np.abs(X) < LINE_W / 2] = LINE
-    border = (np.abs(np.abs(X) - ROOM_X / 2) < 0.04) | (np.abs(np.abs(Y) - ROOM_Y / 2) < 0.04)
-    img[border] = LINE                                                     # a touchline round the rink
+    # the rink is the octagon inside the kerb: the touchline follows it, and the floor the
+    # chamfers cut off is the set's (it was the rink's, a tinted pocket behind each chamfer)
+    edge = np.minimum(np.minimum(ROOM_X / 2 - np.abs(X), ROOM_Y / 2 - np.abs(Y)),
+                      ((ROOM_X / 2 - np.abs(X)) + (ROOM_Y / 2 - np.abs(Y)) - CHAMFER) / math.sqrt(2))
+    img[edge < 0.04] = LINE                                                # a touchline round the rink
+    img[edge < 0.0] = SET_FLOOR[:3]
     for sx in (-START_X, START_X):
         ring = np.abs(np.hypot(X - sx, Y) - 0.30) < 0.025
         img[ring] = LINE
@@ -229,26 +233,28 @@ def decorate(spec: Any) -> None:
     cross_collide(spec)
     _floor_texture(spec)
     box = mujoco.mjtGeom.mjGEOM_BOX
-    hx, hy, hz = ROOM_X / 2 + KERB_T, ROOM_Y / 2 + KERB_T, KERB_H / 2
-    for i, (pos, size) in enumerate((
-        ((0.0, ROOM_Y / 2 + KERB_T / 2, hz), (hx, KERB_T / 2, hz)),
-        ((0.0, -(ROOM_Y / 2 + KERB_T / 2), hz), (hx, KERB_T / 2, hz)),     # the camera's side: glass
-        ((ROOM_X / 2 + KERB_T / 2, 0.0, hz), (KERB_T / 2, hy, hz)),
-        ((-(ROOM_X / 2 + KERB_T / 2), 0.0, hz), (KERB_T / 2, hy, hz)),
-    )):
-        rgba = list(KERB[:3]) + [GLASS if i == 1 else 1.0]
-        spec.worldbody.add_geom(name=f"kerb{i}", type=box, size=list(size), pos=list(pos), rgba=rgba,
-                                contype=1, conaffinity=1, group=2, mass=0.0)
-    # the chamfers: a wall across each corner, from (hx - C, hy) to (hx, hy - C)
-    c = CHAMFER
-    for i, (sx, sy) in enumerate(((1, 1), (-1, 1), (-1, -1), (1, -1))):
-        cx, cy = sx * (ROOM_X / 2 - c / 2), sy * (ROOM_Y / 2 - c / 2)
-        ang = math.atan2(-sx * 1.0, sy * 1.0)                  # along the cut: perpendicular to the corner's diagonal
+    hx, hy, hz, c = ROOM_X / 2, ROOM_Y / 2, KERB_H / 2, CHAMFER
+    # The kerb is an octagon: eight walls of one thickness, each box's inner face on its
+    # edge of the rink and each long enough to reach the outer corner of its mitre with the
+    # next (KERB_T tan 22.5 degrees past the inner corner, buried in the neighbour's box),
+    # so the corners close with no pocket and no gap. It was a rectangle with a wall laid
+    # across each corner: a tinted pocket of rink behind every chamfer, and the chamfer a
+    # touch short of the kerb at both ends, where a puck was once pushed through
+    # (probe_fix10_chamfer). Andrew, 2026-10-16: "drop the unused corner pockets (it looks
+    # cheap)". The mitred outer faces meet at an angle, so nothing flickers (two faces in
+    # one place did, still4).
+    corners = [(hx - c, -hy), (hx, -hy + c), (hx, hy - c), (hx - c, hy),
+               (-hx + c, hy), (-hx, hy - c), (-hx, -hy + c), (-hx + c, -hy)]       # counter-clockwise
+    ext = KERB_T * math.tan(math.radians(22.5))
+    for i in range(8):
+        (x0, y0), (x1, y1) = corners[i], corners[(i + 1) % 8]
+        ang = math.atan2(y1 - y0, x1 - x0)
+        nx, ny = math.sin(ang), -math.cos(ang)                 # outward: to the right of the way round
+        cx, cy = (x0 + x1) / 2 + nx * KERB_T / 2, (y0 + y1) / 2 + ny * KERB_T / 2
         quat = [math.cos(ang / 2), 0.0, 0.0, math.sin(ang / 2)]
-        rgba = list(KERB[:3]) + [GLASS if sy < 0 else 1.0]
-        # a touch shorter than the cut, so its ends do not lie inside the kerb boxes (two faces in one
-        # place flicker as a hatched patch, still4)
-        spec.worldbody.add_geom(name=f"chamfer{i}", type=box, size=[c / math.sqrt(2) - KERB_T * 0.7, KERB_T / 2, hz],
+        glass = (y0 + y1) / 2 < -hy + c * 0.75                 # the camera's side and its two chamfers
+        rgba = list(KERB[:3]) + [GLASS if glass else 1.0]
+        spec.worldbody.add_geom(name=f"kerb{i}", type=box, size=[math.hypot(x1 - x0, y1 - y0) / 2 + ext, KERB_T / 2, hz],
                                 pos=[cx, cy, hz], quat=quat, rgba=rgba, contype=1, conaffinity=1, group=2, mass=0.0)
     _set(spec)
     for light in spec.lights:

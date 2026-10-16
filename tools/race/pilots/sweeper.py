@@ -216,11 +216,15 @@ def stick_model(ly: float, lx: float) -> tuple[float, float]:
 def claw_model(ly: float, lx: float) -> tuple[float, float]:
     return -CLAW_FWD_PER * ly, -CLAW_SIDE_PER * lx
 MATCH_M = 0.30                                             # a sighting within this of a remembered thing is that thing
-FORGET_S = 1.0                                             # a remembered thing in plain view and not seen this long is gone
+FORGET_S = 1.0                                             # a remembered thing in plain view for this long with no sighting is gone
                                                            # (2 s had the crabs walking at ghosts of things long shoved,
                                                            # Andrew: "target a ghost object that is no longer there")
 STALE_WEIGHT = 0.08                                        # m of walk a thing's memory costs per second unseen, when picking
 REFIND_M = 0.45                                            # a lost target is the nearest remembered thing within this
+PICK_SEEN_N, PICK_SEEN_S = 2, 0.2                          # a thing is picked once seen this many times over this long: a
+                                                           # sighting of one frame (a leg of the other crab, a sliver of
+                                                           # floor) was picked, walked at and "not there" a second later
+                                                           # (7 in day28, 6 in day27)
 VIEW_DEG, VIEW_NEAR, VIEW_FAR = 18.0, 0.35, 1.5            # "plain view": inside this cone of the sensor (its half
                                                            # width is 27.5 deg; a thing 2 m off is 2-3 zones and not
                                                            # always a cluster, so the far edge stays short)
@@ -298,6 +302,7 @@ class Senses:
         self.mapper.model = stick_model
         self.mapper.match_win = MATCH_WIN_M
         self.mapper.stall_test = not LEG_ODOM
+        self.once = 0                                      # things remembered from one sighting and forgotten
         self._feet = None                                  # (feet, stance) last step, for the leg odometry
         self.leg_v = (0.0, 0.0)
         hx, hy, c = ROOM_X / 2, ROOM_Y / 2, CHAMFER       # the kerb: the room the crab was put in, known
@@ -472,23 +477,32 @@ class Senses:
             if best is None:
                 self._n += 1
                 best = f"thing{self._n}"
-                self.things[best] = {"name": best, "kind": "thing", "x": wx, "y": wy, "seen": t, "n": 0}
+                self.things[best] = {"name": best, "kind": "thing", "x": wx, "y": wy, "seen": t, "first": t, "n": 0,
+                                     "viewed": None}
             th = self.things[best]
             th["x"], th["y"] = 0.5 * th["x"] + 0.5 * wx, 0.5 * th["y"] + 0.5 * wy
             th["seen"], th["n"] = t, th["n"] + 1
             seen.add(best)
+        crabs = [c for c in self.sight.last["big"] if is_crab(c) and not c.get("kerb")]
         for name in list(self.things):
             th = self.things[name]
-            if name in seen or t - th["seen"] < FORGET_S:
-                continue
-            if t - th["seen"] > STALE_S:
-                del self.things[name]
+            if name in seen:
+                th["viewed"] = None
                 continue
             bx, by = self.mapper.to_body(th["x"], th["y"])
             r, b = math.hypot(bx, by), math.atan2(by, bx)
-            crabs = [c for c in self.sight.last["big"] if is_crab(c) and not c.get("kerb")]
             hidden = any(math.hypot(c["x"] - bx, c["y"] - by) < OCCLUDED_M for c in crabs)
             if VIEW_NEAR < r < VIEW_FAR and abs(b) < math.radians(VIEW_DEG) and not hidden:
+                # in plain view: forgotten after FORGET_S of it with no sighting. The clock is
+                # the time IN VIEW, not the time since the sighting: a memory 3-8 s old, picked
+                # and turned to, was dropped the frame it entered the cone, at 17-18 degrees
+                # (every "not there" in day29 but one, 7-13 a race), before the crab had looked
+                th["viewed"] = th["viewed"] if th.get("viewed") is not None else t
+            else:
+                th["viewed"] = None
+            if t - th["seen"] > STALE_S or (th["viewed"] is not None and t - th["viewed"] >= FORGET_S):
+                if th["n"] < PICK_SEEN_N:
+                    self.once += 1                         # a sighting that never came again: not a thing
                 del self.things[name]
         # two memories of one thing (the map shifted between sightings): keep the fresher
         names = sorted(self.things, key=lambda n: -self.things[n]["seen"])
@@ -526,6 +540,7 @@ def make_pilot(env, player, side):
     performer = Performer(player, side.presses, label=label)
     moves = MOVES[side.name]
     eyes = Truth(env, side) if side.truth else Senses(env, side)
+    truth = eyes if side.truth else Truth(env, side)       # the log's, to say whether a thing given up was there
     claw_press = side.presses.get("claw_left") if CLAW else None
     if not side.truth:
         eyes.mode_fn = lambda: (player.fsm.mode, player.fsm.running_policy)
@@ -665,7 +680,8 @@ def make_pilot(env, player, side):
         return side_of(o["x"]) != mine
 
     def pick(t, x, y):
-        todo = [o for o in eyes.objects() if wrong_side(o) and st["abandoned"].get(o["name"], -1e9) < t - 20.0]
+        todo = [o for o in eyes.objects() if wrong_side(o) and st["abandoned"].get(o["name"], -1e9) < t - 20.0
+                and o.get("n", PICK_SEEN_N) >= PICK_SEEN_N and t - o.get("first", -1e9) >= PICK_SEEN_S]
         foe_w = getattr(eyes, "foe_w", None)
         if foe_w is not None and t - foe_w[2] < 3.0:
             # not the thing the other crab is at: that is its job, and the two of us shoved each
@@ -822,7 +838,11 @@ def make_pilot(env, player, side):
                 near_ = [q for q in eyes.objects() if math.hypot(q["x"] - o["x"], q["y"] - o["y"]) < REFIND_M]
                 now = min(near_, key=lambda q: math.hypot(q["x"] - o["x"], q["y"] - o["y"])) if near_ else None
                 if now is None:
-                    abandon(t, "it is not there any more")
+                    bx, by = eyes.mapper.to_body(o["x"], o["y"])
+                    near_t = min(math.hypot(q["x"] - o["x"], q["y"] - o["y"]) for q in truth.objects())
+                    abandon(t, f"it is not there any more (seen {o.get('n', 0)} times, last {t - o.get('seen', t):.1f} s ago, "
+                               f"{math.hypot(bx, by):.2f} m off at {math.degrees(math.atan2(by, bx)):+.0f} deg; "
+                               f"truly the nearest thing is {near_t:.2f} m from there)")
                     return None
             o = now or o
             st["target"], st["target_w"] = o, (o["x"], o["y"])
@@ -1001,7 +1021,8 @@ def make_pilot(env, player, side):
             st["intent"], st["claw_pressed"] = None, None
             return None
         if intent == "search":
-            todo = [o for o in eyes.objects() if wrong_side(o) and st["abandoned"].get(o["name"], -1e9) < t - 20.0]
+            todo = [o for o in eyes.objects() if wrong_side(o) and st["abandoned"].get(o["name"], -1e9) < t - 20.0
+                and o.get("n", PICK_SEEN_N) >= PICK_SEEN_N and t - o.get("first", -1e9) >= PICK_SEEN_S]
             if todo:
                 st["intent"] = None                          # something came into view: pick it
                 return None
@@ -1041,7 +1062,8 @@ def make_pilot(env, player, side):
             fx = eyes.fixes
             print(f"\n[{label}] {t:6.2f}s  map pose off by ({ex:+.2f}, {ey:+.2f}) m, {math.degrees(eyaw):+.0f} deg; "
                   f"{len(eyes.things)} things remembered; kerb in {eyes.kerb_frames} frames, fixes +x {fx[0]} -x {fx[1]} "
-                  f"+y {fx[2]} -y {fx[3]}" + (", stalled" if eyes.mapper.stalled else "") + (", blocked" if eyes.blocked else "")
+                  f"+y {fx[2]} -y {fx[3]}; {eyes.once} seen once and forgotten"
+                  + (", stalled" if eyes.mapper.stalled else "") + (", blocked" if eyes.blocked else "")
                   + (", jammed" if eyes.jammed else ""))
             eyes.fixes = [0, 0, 0, 0]
             eyes.kerb_frames = 0

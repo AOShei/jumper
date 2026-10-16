@@ -30,15 +30,19 @@ pads, so the whole thing is a `play --app` the robot could run.
 
 ## The room
 
-4 x 2.6 m, a 35 cm kerb round it with every corner cut off by a 45-degree wall
-0.45 m along each side (a thing in a square corner has two free faces and both
-shove it into a wall -- no crab wider than the gap can get behind it, so it
-stayed there for half a match; on the chamfer it is shoved along the diagonal
-and out), (a ball cannot roll over it, a crab cannot climb
-it, and it is what the crab localises against: taller than a crab and every
-object, so the depth image cannot mistake it for either; the camera-side wall is
-drawn as glass so it hides nothing), each half in its team's colour,
-the line and a touchline in white. Round it the set, drawn only: a dark floor,
+4 x 2.6 m with every corner cut off by a 45-degree wall 0.45 m along each
+side (a thing in a square corner has two free faces and both shove it into a
+wall -- no crab wider than the gap can get behind it, so it stayed there for
+half a match; on the chamfer it is shoved along the diagonal and out), so the
+rink is an octagon, and a 35 cm kerb round it of eight mitred walls (a ball
+cannot roll over it, a crab cannot climb it, and it is what the crab localises
+against: taller than a crab and every object, so the depth image cannot
+mistake it for either; the camera-side wall and its two chamfers are drawn as
+glass so they hide nothing). It was a rectangle with a wall laid across each
+corner, which left a tinted pocket of rink behind every chamfer and the
+chamfer a touch short of the kerb at both ends, where a puck was once pushed
+through (Andrew: "drop the unused corner pockets, it looks cheap"). Each half
+is in its team's colour, the line and a touchline round the octagon in white. Round it the set, drawn only: a dark floor,
 three walls (none on the camera's side) with a banner in each team's colour on
 its half of the back wall, a post at each corner; the daylight scene's sun is
 turned overhead so the kerb throws no shadow across the rink. Six objects a side by default
@@ -114,10 +118,16 @@ Things seen are remembered in the map's frame, matched sighting to sighting
 within 0.3 m -- and a cluster within 0.3 m of a remembered thing stays a thing
 whatever this frame's gates say of it, short of kerb height, so the tracking
 does not flicker between thing and wall from frame to frame (the overlay's
-colours are a majority of the last three frames for the same reason) -- forgotten when in plain view and unseen for 1 s (not when the other
+colours are a majority of the last three frames for the same reason) -- forgotten after 1 s in plain view with no sighting (not when the other
 crab is within 0.7 m of where they were; at 2 s the crabs walked at ghosts of
 things long shoved) or unseen for 15 s anywhere; a fresh sighting is picked
-before a stale memory, and a thing the other crab stands at is left to it. A crab
+before a stale memory, and a thing the other crab stands at is left to it. The
+second is counted in view, not since the sighting: a memory 3-8 s old, picked
+and turned to, was dropped the frame it entered the cone, at 17-18 degrees,
+before the crab had looked, and that was every "not there any more" give-up
+but one, 7-13 a race (day29, three runs). A thing is picked once it has been
+seen twice, at least 0.2 s apart: a sighting of one frame (a leg of the other
+crab, a sliver of floor) is refused 10-13 times a race and never came again. A crab
 whose memory holds nothing on the wrong half walks to the middle of that half
 and turns a full circle before it believes it.
 
@@ -416,6 +426,9 @@ would work needs something it can take: a 5 cm prize object, or a handle.
 | day26 (the wall route) | sensed | 120 s | blue 9-3 | 32 | 8 shoves, 33 jam give-ups: the jam cluster read a side wall alongside, and the orbit never reached a goal in a corner's clearance (see above); poses means 7 and 4 cm |
 | day27 (seed 5: the jam band, the orbit's goal reachable, the floor slope) | sensed | 120 s | blue 11-1 | 90 | 22 shoves, 21 jam give-ups (each a corner turn on the wall route), 6 ghosts; poses means 7 and 7 cm, worst 0.23 and 0.19 |
 | day28 (seed 5: the jam as the whole picture, the turn stick's band, the shove started lined up, the corner's legs) | sensed | 120 s | blue 10-2 | 110 | 29 shoves, 24 give-ups: 0 jams, 15 "other crab", 7 ghosts, 2 with no standing point; 11 legs ended at the kerb's face and 1 round the corner, none a give-up; poses means 9 and 4 cm, worst 0.48 (red, 85 s) and 0.23 |
+| day29 (seed 5, three runs of one code: the octagon kerb, a thing picked once seen twice) | sensed | 120 s | blue 7-5, red 7-5, blue 9-3 | 93, 102, 100 | 27, 32, 30 shoves; 25, 24, 18 give-ups, of them 7, 13, 5 "not there" -- the same code three times is the spread on one seed, so a change is judged on two runs from here; the one-frame sightings refused 10-13 a crab, none of them a give-up; poses means 5-11 cm, worst 0.89 (blue, 15 s, no x fix along the -y wall) |
+| day30b (seed 5, the plain-view clock) | sensed | 120 s | blue 9-3 | 106 | 33 shoves, 13 give-ups: 3 "other crab", 5 "not there" (each checked: the nearest thing truly 0.4-1.4 m from the memory), 5 with no standing point; poses means 5 and 7 cm, worst 0.21 and 0.30 |
+| day30 (seed 5, the plain-view clock, the film take) | sensed | 120 s | blue 7-5 | 91 | 24 shoves, 28 give-ups: 17 "other crab" (the pick's foe rule, next), 6 "not there" (checked, truly gone), 4 with no standing point, 1 at the kerb three times; poses means 5 and 14 cm, blue 0.97 m off in x from 15 to 20 s on its first shove along the -y wall (the second run of five with ~0.9 m there: no x fix along a side wall) |
 
 Objects shoved deep into a half end up against the far kerb, where the other
 crab can only get beside them, not behind: the slanting approaches handle it
