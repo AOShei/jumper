@@ -150,7 +150,9 @@ they slide". Three answers, all from what the crab carries. Kerb zones at the
 nose (twenty of them nearer than 0.24 m within 12 cm of the nose's axis; a
 cluster was tried, and a side wall running alongside at 0.22 m is one cluster
 whose nearest point is beside the shell, day26) while the legs say forward are
-a slip: it reckons nothing and the shove is given up at once. A leg velocity into a wall the pose
+a slip: it reckons nothing and the shove is given up at once, and the same against the
+other crab's shell (the sticks were stopped there and the legs were not, 0.33 m of pose
+in half a second, probe_fix14_chamfer). A leg velocity into a wall the pose
 already stands at (0.20 m from it) loses that component. And a shove jammed
 with the thing under the nose -- the kerb a puck's width off -- is the wall
 fix's: the things are low, so the kerb above the thing stays in view, and the
@@ -162,6 +164,26 @@ and 10 cm of reckoned walk in half a second with the kerb ahead coming no
 nearer fired on nearly every shove (day24): a side wall seen at a slant keeps
 its median range as the crab walks beside it, and the nearest kerb cluster
 ahead is a different one frame to frame.
+
+A jam is the kerb filling the picture: at least 60% of the zones the crab
+sees (its own legs left out), 300 at the least, nearer than 0.24 m. Day27's 21
+"jam" give-ups were read as corner turns and were not: staged on its own
+(probe_jamband, 2026-10-16, a square puck against the side wall), the "kerb"
+at the nose was the puck itself, 58 zones at 0.22-0.24 m and 8-9 cm up, in one
+cluster with the wall 0.4 m behind it -- the cut that frees a thing from the
+kerb's cluster asked the cluster to reach kerb height, and from there the wall
+shows one row above it. The cut now runs on any cluster out of the picture's
+top, with the wall's depth per column taken from the zones above thing height.
+The band of kerb zones at the nose was then asked to stand 0.10 m up, where
+the kerb truly at the nose fills the picture from 0.10 to 0.18 m (2268 zones at
+0.15-0.19 m, probe_jamband2), and that held until the nose pitched down on a
+puck and its zones read 9-18 cm up: the floor's height is the lowest own body
+along the body's up (probe_fix8_chamfer). The whole picture is the tell that
+survives: jammed, every ray meets the face within 0.19 m, head-on or at a 45
+degree slant, while a thing under the nose covers a third of the picture at
+most and the floor shows past it. The kerb from 0.3 m at a slant is crab-sized
+inside the picture too (top 0.26, 0.37 wide, 0.29 deep) and read as the other
+crab on a corner shove; a cluster flagged kerb is never the crab.
 
 Still open: a crab working along a side wall gets no fix on x until an end
 wall is in view again, and drifts up to 0.4-0.8 m meanwhile (the legs read a
@@ -183,7 +205,19 @@ probe_speed and the loop's readout: forward 0.56 m/s at a 0.75 stick and 0.7 at
 per unit from 0.08 with no dead band to speak of -- modelling it with the walk's
 band put 1.1 m/s on the orbit's 0.9 stick and ran a pose three metres off; turn
 33 deg/s at 0.62, ~50 from 0.8 up) and the heading is the gyro's (within 1
-degree over two minutes). Pushing into the other crab the walk stick moves
+degree over two minutes). The turn stick has a dead band of its own, measured
+on its own (probe_turn, 2026-10-16, 3 s at each level): nothing below 0.5
+(-1 deg/s from 0.2 to 0.5), then 17, 23, 32, 40, 49 and 57 deg/s at 0.52,
+0.54, 0.56, 0.58, 0.60 and 0.62, a straight line of 470 deg/s per unit. Every
+heading loop asked a stick proportional to its error and so did nothing for
+an error under 14 degrees: a shove along the end wall held 9 degrees into the
+wall for its whole length, uncorrected, with the legs on the wall side slipping
+(probe_fix_corner). The loops now ask a rate, 3 deg/s per degree of error, and
+put it past the band. The turn comes through whatever the walk stick says
+(probe_turn4, the rate over the second half-second of a 2 s hold: 57 deg/s
+at 0.62 alone, 55, 57, 55 and 55 with the walk stick at 0.40, 0.55, 0.65 and
+0.75); a first reading of 12 deg/s at the shove's 0.75 was the crab walking
+into the idle one for its 2.5 s hold. Pushing into the other crab the walk stick moves
 nothing and is not reckoned; the strafe still is (zeroing it too left an orbit
 round the other crab unreckoned, 0.7 m in 5 s). The pose is clamped inside the
 kerb, where the body has to be. The
@@ -243,7 +277,12 @@ measures 0.18) is taken and kept for the job unless the thing moves 0.3 m or
 it stops fitting (re-chosen every 1.5 s before, it flipped the slant's side
 and sent the orbit back the way it came -- Andrew: a crab "circles around an
 object and then reverses direction multiple times, even though it should just
-go for it"). The things deepest in the other half are picked first.
+go for it"). A thing with no standing point at all -- no leg of a wall
+route and no slant the body fits in, a puck on the chamfer's face 0.23 m
+from the end wall -- is given up for 20 s rather than circled for 10
+(probe_fix10_chamfer; before, the last resort was the point straight behind
+clamped into the room, which lay on the thing). The things deepest in the
+other half are picked first.
 
 While a crab shoves, the thing fills the sensor's whole picture and no wall is
 in view, so the pose runs on the dead reckoning alone for the length of the
@@ -268,10 +307,62 @@ clearance, and going round the long way met the other wall, so the orbit swung
 between the two walls' limits for its whole 10 s (probe_orbitwall, 2026-10-15;
 with the goal made the clamped standing point's angle and the side check at
 0.2 m instead of 0.35, it arrived in a second and the puck went along the side
-wall and over). And the shove starts from anywhere within 45 degrees of the
-standing angle with the nose on the thing, turning on the spot first when more
-than 50 degrees off its heading (walking meanwhile walked into the corner,
-day26): the push's own lateral stick takes up the rest.
+wall and over). The orbit's strafe is proportional to the angle left (full
+at 28 degrees, nothing inside 8) and the shove starts from within 15 degrees
+of the standing angle, facing the thing: there the thing stays in the 27.5
+degree picture while the heading is taken up. (It started from 45 before, and
+the orbit's full-stick strafe stopped at 30: the shove turned on the spot,
+swung the nose off a puck 0.4 m away, took it for under the nose -- the blind
+rule -- and walked into the side wall, probe_jam9. Steering the nose onto the
+thing during the shove, with the body strafing round to the line, was tried
+instead and turned a crab beside a side wall 37 degrees into it,
+probe_fix_side: the heading hold is right, it has to start lined up.) A thing
+that leaves the picture by an edge rather than under the nose sends the crab
+back to the orbit; one last seen nearer than 0.45 m and within 0.2 m of the
+axis is under the nose, out of the picture's bottom, and the blind rule holds.
+The shove starts only with the thing in the picture now, not on a memory
+within the facing tolerance (a shove begun on a memory 30 degrees off found
+nothing under the nose and bounced between the orbit and the shove at 50 Hz,
+probe_fix3_corner). Boxed by the kerb short of the standing angle by less
+than 45 degrees the shove starts from there (a right angle before; and the
+orbit's side check looked 0.2 m ahead at the standing clearance, two margins
+stacked to 0.4 m, so a standing point 0.2 m from the end wall, the wall
+route's, was never reached and the shove began "boxed" 49-66 degrees off,
+probe_fix2_corner, probe_fix3_chamfer: it looks 5 cm ahead now, at the body's
+own clearance). The standing point is kept out of the chamfers' clearance as
+well as the walls'.
+
+The corner. A thing on a wall route that reaches the next wall -- the end
+wall's corner, the chamfer's end -- is the next leg of its route, not a jam:
+the crab backs off and takes it again from its new side, no give-up and no
+cooldown, judged on the thing in the picture and never on the blind estimate
+under the nose (pushed into the chamfer the estimate crossed the legs' line
+half a second into every shove and the puck moved a centimetre a time,
+probe_fix9_chamfer). The end wall's leg heads 15 degrees toward the room, so
+the thing is pushed on its wall-side flank and goes round the corner rather
+than into it (pushed square on, with the crab's axis a few centimetres on the
+room's side of it, a puck at the chamfer's face went into the corner and
+through the kerb, probe_fix10_chamfer). The route near the chamfer runs along
+the nearer of the two walls, the other's leg if the body does not fit behind
+the thing for it, not along the chamfer: a shove along the chamfer needs the crab behind the
+thing on the chamfer's line, which for a thing within 0.4 m of the end wall
+is inside the end wall (clamped into the room, the standing point lay 64
+degrees off the shove's heading, the nose turned off the thing and the crab
+walked into the side wall, probe_fix4_chamfer). The chamfer's face does the
+turning: shoved along the end wall into it, the thing slides onto the side
+wall. A route leg whose standing point the room clamps by more than 0.15 m
+is no leg (clamped out of the chamfer it landed on the thing, a goal angle 60
+degrees off, probe_fix7_corner); the open costing then finds the slant the
+body fits in. And a shove whose nose reaches a wall's face, by the map, 0.25
+m ahead and more than 30 degrees into it, ends there: the thing under the nose
+has slid aside, and the next leg starts from where it lies. The face itself,
+no clearance: with the thing still under the nose the base cannot be nearer a
+wall than its far edge, 0.37 m (a 0.17 m clearance on a point 0.30 m ahead
+ended a shove into the chamfer the moment it began, four times,
+probe_fix8_chamfer). A thing stopped at the kerb three times without moving
+0.15 m between stops is given up for 4 s. probe_fix9_corner, a puck 0.2 m
+from the end wall: along the end wall, round the corner, along the side wall
+and over the line in 17.6 s, three legs, no give-up.
 
 Andrew asked for "a walking gait with claws extended" for the shove. Measured
 (probe_armpush: red in `claw_left`, the arm out web-up, walking into a staged
@@ -324,6 +415,7 @@ would work needs something it can take: a 5 cm prize object, or a handle.
 | day25 (the nose jam only, the orbit's hysteresis, no things on a kerb line) | sensed | 120 s | red 8-4 | 44 | 16 shoves, 30 jam give-ups (the peel's slants drove things into the walls); poses means 6 and 5 cm, worst 0.21 and 0.20 |
 | day26 (the wall route) | sensed | 120 s | blue 9-3 | 32 | 8 shoves, 33 jam give-ups: the jam cluster read a side wall alongside, and the orbit never reached a goal in a corner's clearance (see above); poses means 7 and 4 cm |
 | day27 (seed 5: the jam band, the orbit's goal reachable, the floor slope) | sensed | 120 s | blue 11-1 | 90 | 22 shoves, 21 jam give-ups (each a corner turn on the wall route), 6 ghosts; poses means 7 and 7 cm, worst 0.23 and 0.19 |
+| day28 (seed 5: the jam as the whole picture, the turn stick's band, the shove started lined up, the corner's legs) | sensed | 120 s | blue 10-2 | 110 | 29 shoves, 24 give-ups: 0 jams, 15 "other crab", 7 ghosts, 2 with no standing point; 11 legs ended at the kerb's face and 1 round the corner, none a give-up; poses means 9 and 4 cm, worst 0.48 (red, 85 s) and 0.23 |
 
 Objects shoved deep into a half end up against the far kerb, where the other
 crab can only get beside them, not behind: the slanting approaches handle it

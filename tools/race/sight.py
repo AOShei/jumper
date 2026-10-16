@@ -48,15 +48,21 @@ CRAB_DEPTH = 0.12                 # m front to back in the picture: a crab's leg
 KERB_MIN = 0.27                   # the kerb is 0.35 m tall: nothing else in the room reaches this
 CRAB_CUT_M = 0.17                 # nearer than this the other crab's shell (0.20 up) runs out of the picture's top
                                   # too; a cut cluster farther off is the kerb, nearer the map decides (`at_wall`)
-JAM_M = 0.24                      # kerb zones nearer than this in the band JAM_BAND_M either side of the nose's
-                                  # axis, JAM_ZONES of them, are the kerb at the nose: the base stops 0.18 m from
-                                  # the face (probe_walljam). A band, not a cluster: a side wall running alongside
-                                  # at 0.22 m is one cluster whose nearest point is beside the shell and whose
-                                  # zones all lie 0.22 m to the side, and it read as a jam on every shove along
-                                  # it (day26). With a thing under the nose the kerb stays a puck's width off and
-                                  # is NOT a jam: 0.47 m with a thing ahead gave up every shove along a side wall,
-                                  # 49 in a race (day23); the wall fix handles that one
-JAM_BAND_M, JAM_ZONES = 0.12, 20
+JAM_M = 0.24                      # the kerb at the nose: at least JAM_FRAC of the picture's zones (the crab's own
+JAM_FRAC, JAM_ZONES = 0.6, 300     # legs left out) nearer than this, JAM_ZONES of them at the least. Jammed, the base
+                                  # stops 0.18 m from the face (probe_walljam) and the face is the whole picture
+                                  # (2268 zones at 0.15-0.19 m, probe_jamband2); at a 45 degree slant every ray
+                                  # meets it within 0.19 m too. A thing under the nose fills a third of the picture
+                                  # at most (a square puck at 0.22-0.24 m: 700 zones), the floor the rest. Rules
+                                  # tried before it: a kerb CLUSTER at the nose (a side wall alongside at 0.22 m is
+                                  # one cluster whose nearest point is beside the shell: a jam on every shove along
+                                  # it, day26); a band of kerb zones within 12 cm of the axis (the puck under the
+                                  # nose, labelled kerb with the wall behind it, 58 zones at 8-9 cm up, day27);
+                                  # that band above 0.10 then 0.13 m (the puck's zones read 9-18 cm up when the
+                                  # nose pitched down on it, the floor's estimate being the lowest own body along
+                                  # the body's up, probe_fix8_chamfer). The kerb 0.47 m off behind a thing is NOT a
+                                  # jam: 0.47 m with a thing ahead gave up every shove along a side wall, 49 in a
+                                  # race (day23); the wall fix handles that one
 NEAR_M = 0.45                     # nearer than this a thing fills the picture's width and touches its edges: the
                                   # width and edge gates are not asked of it (at 27 cm a 15 cm cube was 1895 zones,
                                   # edge-cut, and not a thing: the crab went blind on contact, probe_contact)
@@ -189,19 +195,23 @@ class Sight:
     @staticmethod
     def _split_proud(labels: np.ndarray, n: int, pts: np.ndarray, h: np.ndarray):
         """A thing against the kerb, cut out of the kerb's cluster: in each column of a
-        cluster that reaches kerb height, the wall's depth is the median of its tall
-        zones; the low zones nearer than that by `PROUD_M` are not wall. They become
-        clusters of their own (connected among themselves)."""
+        cluster that reaches kerb height or runs out of the picture's top, the wall's
+        depth is the median of its zones above thing height; the low zones nearer than
+        that by `PROUD_M` are not wall. They become clusters of their own (connected
+        among themselves). Thing height, not kerb height: with a puck under the nose
+        the wall 0.4 m behind it shows only up to 0.30 m, one row above the kerb's
+        0.27, and the puck stayed in the kerb's cluster -- a jam on every shove along
+        a side wall (probe_jamband, day27)."""
         x = pts[:, 0].reshape(ROWS, COLS)
         hh = h.reshape(ROWS, COLS)
         proud = np.zeros((ROWS, COLS), dtype=bool)
         for k in range(1, n + 1):
             sel = labels == k
-            if sel.sum() < 15 or hh[sel].max() < KERB_MIN:
+            if sel.sum() < 15 or (hh[sel].max() < KERB_MIN and not sel[0].any()):
                 continue
             for c in range(COLS):
                 col = sel[:, c]
-                tall = col & (hh[:, c] > CRAB_HEIGHT[1])
+                tall = col & (hh[:, c] > OBJECT_HEIGHT[1])
                 if tall.sum() < 2:
                     continue
                 wall_x = float(np.median(x[tall, c]))
@@ -259,7 +269,7 @@ class Sight:
         h = pts @ up - floor
         obj = valid & ~self_mask & (h > FLOOR_CLEAR + FLOOR_SLOPE * r) & (r < MAX_RANGE) & (pts[:, 0] > 0.10)
         self.frames += 1
-        things, big, kerb, masks, jam = self._things(obj.reshape(ROWS, COLS), pts, h)
+        things, big, kerb, masks, jam = self._things(obj.reshape(ROWS, COLS), pts, h, int((valid & ~self_mask).sum()))
         # the overlay's colours by a majority of the last three frames: a zone flickering
         # between thing and wall frame to frame reads as noise, and mostly is
         self._masks = (self._masks + [tuple(m.reshape(ROWS, COLS) for m in masks)])[-3:]
@@ -271,7 +281,7 @@ class Sight:
                      "thing_px": vote[0], "kerb_px": vote[1], "crab_px": vote[2]}
         return True
 
-    def _things(self, obj: np.ndarray, pts: np.ndarray, h: np.ndarray):
+    def _things(self, obj: np.ndarray, pts: np.ndarray, h: np.ndarray, seen: int = ROWS * COLS):
         """The clusters that are object-sized, each with its position in the base
         frame (x ahead, y left: the nearest face's median), and the ones that are not
         (the other crab, the kerb), which the map still wants as obstacles."""
@@ -326,9 +336,9 @@ class Sight:
         # 2026-10-15: a crab at 0.26 m is one cluster of 1371 zones, 0.20 m tall, with
         # leg pieces of 3-5 zones round it), so a thing within `CRAB_SKIRT` of a crab-sized
         # cluster is part of the crab.
-        crabs = [b for b in big if is_crab(b)]
-        kp = pts[kerb_px]
-        jam = bool(((np.abs(kp[:, 1]) < JAM_BAND_M) & (kp[:, 0] < JAM_M)).sum() >= JAM_ZONES) if len(kp) else False
+        crabs = [b for b in big if is_crab(b) and not b.get("kerb")]   # the kerb close up is crab-sized
+        near = int((obj.ravel() & (pts[:, 0] < JAM_M)).sum())
+        jam = near >= JAM_ZONES and near >= JAM_FRAC * seen
         kept = []
         for d in things:
             sel = d.pop("sel")
